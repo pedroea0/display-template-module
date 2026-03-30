@@ -1,0 +1,89 @@
+{
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "mode": {
+            "type": "string",
+            "enum": ["realtime", "historical"],
+            "description": "Realtime: last N hours from now. Historical: use start/end date.",
+            "default": "realtime"
+        },
+        "rangeHours": {
+            "type": "number",
+            "description": "Time range in hours (realtime mode).",
+            "default": 24,
+            "minimum": 0.1,
+            "maximum": 720
+        },
+        "pointCount": {
+            "type": "number",
+            "description": "Max data points per series (0 = natural).",
+            "default": 300,
+            "minimum": 0,
+            "maximum": 10000
+        },
+        "refreshRate": {
+            "type": "number",
+            "description": "Refresh interval in ms (0 = no auto refresh).",
+            "default": 1000,
+            "minimum": 0,
+            "maximum": 3600000
+        },
+        "startDate": {
+            "type": ["string", "null"],
+            "description": "Start date for historical mode (ISO string or null).",
+            "default": null
+        },
+        "endDate": {
+            "type": ["string", "null"],
+            "description": "End date for historical mode (ISO string or null).",
+            "default": null
+        },
+        "dateFormat": {
+            "type": "string",
+            "description": "Date format for axis and tooltips.",
+            "default": "YYYY/MM/DD"
+        },
+        "timeFormat": {
+            "type": "string",
+            "description": "Time format for axis and tooltips.",
+            "default": "h:mm A"
+        },
+        "visibility": {
+            "type": "object",
+            "properties": {
+                "showDateRangeSelector": { "type": "boolean", "default": true },
+                "showPenControlDisplay": { "type": "boolean", "default": true },
+                "showRefreshButton": { "type": "boolean", "default": true },
+                "showZoomButton": { "type": "boolean", "default": true },
+                "showFullscreenButton": { "type": "boolean", "default": true }
+            },
+            "default": {
+                "showDateRangeSelector": true,
+                "showPenControlDisplay": true,
+                "showRefreshButton": true,
+                "showZoomButton": true,
+                "showFullscreenButton": true
+            }
+        },
+        "interaction": {
+            "type": "object",
+            "properties": {
+                "mode": {
+                    "type": "string",
+                    "enum": ["panAndZoom", "selection"],
+                    "default": "panAndZoom"
+                },
+                "xTraceVisible": { "type": "boolean", "default": true }
+            },
+            "default": {
+                "mode": "panAndZoom",
+                "xTraceVisible": true
+            }
+        },
+        "style": {
+            "$ref": "urn:ignition-schema:schemas/style-properties.schema.json",
+            "default": { "classes": "" }
+        }
+    }
+}

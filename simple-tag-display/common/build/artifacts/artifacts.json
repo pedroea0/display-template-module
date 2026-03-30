@@ -1,0 +1,11 @@
+{
+    "projectPath": ":common",
+    "projectName": "common",
+    "scope": "DG",
+    "artifacts": [
+        {
+            "id": "simple-tag-display:common:1.0.0",
+            "jarName": "common-1.0.0.jar"
+        }
+    ]
+}

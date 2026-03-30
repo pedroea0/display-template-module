@@ -1,0 +1,11 @@
+{
+    "projectPath": ":gateway",
+    "projectName": "gateway",
+    "scope": "G",
+    "artifacts": [
+        {
+            "id": "simple-tag-display:gateway:1.0.0",
+            "jarName": "gateway-1.0.0.jar"
+        }
+    ]
+}
