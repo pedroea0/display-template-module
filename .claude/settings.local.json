@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(ls -d \"/c/Users/PedroEspinosa/OneDrive - NeoMatrix Inc/Desktop/Rocks/Display Template Module\"/*/)",
-      "Bash(ls -d */)"
-    ]
-  }
-}
