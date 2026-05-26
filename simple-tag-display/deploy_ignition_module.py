@@ -1,9 +1,26 @@
 """
 Deploy the signed Simple Tag Display module to an Ignition 8.3 Gateway via HTTP API.
-Called from build-and-sign.ps1 after build+sign. All config is hardcoded below (dev only).
+
+Called automatically from build-and-sign.ps1 as the final step after the
+.modl is signed. Can also be invoked manually:
+    python deploy_ignition_module.py [--gateway-url URL] [--api-token TOK]
+                                     [--module-file PATH] [--module-id ID]
+                                     [--skip-uninstall] [--no-restart]
+
+Lifecycle (4 HTTP calls in sequence):
+    1. DELETE /data/api/v1/modules/uninstall   ← schedule current version for removal
+    2. POST   /data/api/v1/modules/upload      ← upload the new .modl bytes
+    3. POST   /data/api/v1/modules/install     ← finalize install
+    4. POST   /data/api/v1/restart-tasks/restart  ← gateway restart applies both ops
+
+Each call is authenticated with X-Ignition-API-Token. The token is created in:
+    Gateway → Config → Security → API Keys
+
+All defaults below are dev-only. In production, override with CLI flags or env vars.
 """
 
 import argparse
+import json
 import os
 import sys
 import time
@@ -17,11 +34,35 @@ except ImportError:
     sys.exit(1)
 
 
-# ---- Hardcoded config (dev only) -------------------------------------------
+# ---- Default config -------------------------------------------------------
+#
+# These are PLACEHOLDERS. Two ways to supply your real gateway URL + API token:
+#
+#   1. (Recommended) Copy deploy_config.example.json to deploy_config.local.json
+#      and fill in your own values. That file is git-ignored, so each developer
+#      / environment can have its own settings without touching committed code.
+#
+#   2. Pass --gateway-url and --api-token on the command line. CLI flags win
+#      over the file, which wins over the placeholders below.
+#
+# The API token is created in: Gateway → Config → Security → API Keys
+# It needs permission to manage modules and restart the gateway.
 
-DEFAULT_GATEWAY_URL = "http://10.10.20.156:8088"
-DEFAULT_API_TOKEN = "PE:ZNU_IsauvD14NlgiMQPPEHOgjCszIygQYOVvpmevRQ4"  # Gateway: Config > Security > API Keys
-DEFAULT_MODULE_ID = "com.example.simpletagdisplay.SimpleTagDisplay"
+DEFAULT_GATEWAY_URL = "http://REPLACE-WITH-YOUR-GATEWAY:8088"     # ← override in deploy_config.local.json
+DEFAULT_API_TOKEN   = "REPLACE_WITH_YOUR_API_TOKEN"                # ← override in deploy_config.local.json
+DEFAULT_MODULE_ID   = "com.example.simpletagdisplay.SimpleTagDisplay"
+
+# Load deploy_config.local.json if it exists next to this script.
+_LOCAL_CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "deploy_config.local.json")
+if os.path.isfile(_LOCAL_CONFIG_PATH):
+    try:
+        with open(_LOCAL_CONFIG_PATH, "r", encoding="utf-8") as _fh:
+            _local = json.load(_fh)
+        DEFAULT_GATEWAY_URL = _local.get("gateway_url", DEFAULT_GATEWAY_URL)
+        DEFAULT_API_TOKEN   = _local.get("api_token",   DEFAULT_API_TOKEN)
+        DEFAULT_MODULE_ID   = _local.get("module_id",   DEFAULT_MODULE_ID)
+    except Exception as _exc:
+        print(f"WARNING: Failed to load {_LOCAL_CONFIG_PATH}: {_exc}", file=sys.stderr)
 
 # Endpoints from Ignition 8.3 /openapi
 MODULE_UNINSTALL_PATH = "/data/api/v1/modules/uninstall"   # DELETE, body: {"uninstall": [moduleId]}
@@ -131,8 +172,15 @@ def main(argv=None) -> int:
     module_file = args.module_file or _default_module_file()
     module_id = args.module_id or DEFAULT_MODULE_ID
 
-    if api_token == "PASTE_YOUR_API_TOKEN_HERE":
-        print("ERROR: Edit deploy_ignition_module.py and set DEFAULT_API_TOKEN to your Gateway API key.", file=sys.stderr)
+    if api_token in ("REPLACE_WITH_YOUR_API_TOKEN", "PASTE_YOUR_API_TOKEN_HERE", "", None):
+        print("ERROR: No API token configured. Either:", file=sys.stderr)
+        print("  1. Copy deploy_config.example.json → deploy_config.local.json next to this script", file=sys.stderr)
+        print("     and fill in your own gateway_url and api_token, OR", file=sys.stderr)
+        print("  2. Pass --api-token on the command line.", file=sys.stderr)
+        return 1
+
+    if "REPLACE-WITH-YOUR-GATEWAY" in base_url:
+        print("ERROR: No gateway URL configured. See deploy_config.example.json or pass --gateway-url.", file=sys.stderr)
         return 1
 
     if not os.path.isfile(module_file):
