@@ -5,25 +5,35 @@ import com.inductiveautomation.perspective.common.api.ComponentDescriptor;
 import com.inductiveautomation.perspective.common.api.ComponentDescriptorImpl;
 
 /**
- * Describes the Tag Display component to the Java registry so the gateway and designer know to look for the front end elements.
- * In a 'common' scope so that it's referenceable by both gateway and designer.
+ * Java-side descriptor for the SimpleTagDisplay component.
+ *
+ * Pairs with the JS-side `SimpleTagDisplayMeta` class in simpletagdisplay.js
+ * via the shared COMPONENT_ID. The gateway registers DESCRIPTOR at startup
+ * (see SimpleTagDisplayGatewayHook#startup), and the designer registers it
+ * again at design time (see SimpleTagDisplayDesignerHook).
+ *
+ * Lives in 'common' scope so it can be referenced by both gateway and designer.
  */
 public class SimpleTagDisplayComponent {
 
-    // Unique ID of the component which perfectly matches that provided in the javascript's ComponentMeta implementation
+    /** MUST match the value returned by SimpleTagDisplayMeta.getComponentType() in the JS. */
     public static final String COMPONENT_ID = "com.example.simpletagdisplay.SimpleTagDisplay";
 
     /**
-     * The schema provided with the component descriptor. Use a schema instead of a plain JsonObject because it gives
-     * us a little more type information, allowing the designer to highlight mismatches where it can detect them.
+     * Property schema parsed from common/src/main/resources/simpletagdisplay.props.json.
+     * Defines every binding-eligible prop the designer exposes for this component.
+     * A typed JsonSchema (vs. raw JsonObject) lets the designer flag mismatches.
      */
     public static final JsonSchema SCHEMA =
         JsonSchema.parse(SimpleTagDisplayComponent.class.getResourceAsStream("/simpletagdisplay.props.json"));
 
     /**
-     * Components register with the Java side ComponentRegistry by providing a ComponentDescriptor. Here we
-     * build the descriptor for this component.
-     * Note: The icon will be set in the DesignerHook where we can convert Icon to BufferedImage.
+     * Descriptor passed to ComponentRegistry.registerComponent(). It tells Perspective:
+     *   - where to put it in the component palette (Display category, "Tag Display" name)
+     *   - which schema and module it belongs to
+     *   - which browser JS resources to inject into sessions that use it
+     * Icon (palette thumbnail) is set later in the DesignerHook because Icon → BufferedImage
+     * conversion only makes sense in the designer scope.
      */
     public static final ComponentDescriptor DESCRIPTOR = ComponentDescriptorImpl.ComponentBuilder.newBuilder()
         .setPaletteCategory("Display")

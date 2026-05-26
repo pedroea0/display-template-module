@@ -17,10 +17,20 @@
         },
         "pointCount": {
             "type": "number",
-            "description": "Max data points per series (0 = natural).",
+            "description": "Max data points per series when rawHistory is false (fixed-interval LastValue). Ignored when rawHistory is true.",
             "default": 300,
             "minimum": 0,
             "maximum": 10000
+        },
+        "rawHistory": {
+            "type": "boolean",
+            "description": "When true, historian returns on-change (raw) samples in the time range instead of aggregated buckets. Can be heavy for long ranges.",
+            "default": false
+        },
+        "freeRangePanZoom": {
+            "type": "boolean",
+            "description": "When true (default), in realtime mode pan/zoom sets the historian query window to the visible x range so you can scroll back and load past data without switching to historical mode. When false, queries always use the configured rolling rangeHours regardless of pan/zoom.",
+            "default": true
         },
         "refreshRate": {
             "type": "number",

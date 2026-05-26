@@ -17,7 +17,28 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.util.EnumSet;
 
 /**
- * Session trend list (GET/POST) and tag history (GET) routes.
+ * REST routes for the CTG chart's session trend list + historian queries.
+ *
+ * All routes:
+ *   - Are GET-only (Ignition's data routes don't accept POST/PUT for these).
+ *   - Require an authenticated Perspective Client or Designer session
+ *     (so the JS gets a session cookie via fetch with credentials:'same-origin').
+ *   - Return JSON: { success: bool, error?: string, ... payload ... }.
+ *
+ * URL prefix is the module's URL_ALIAS:  /data/simpletagdisplay/<route>
+ *                              or         /main/data/simpletagdisplay/<route>
+ *
+ * Routes:
+ *   /trendList               (GET)   → { tagPaths: ["[default]A", "[default]B"] }
+ *   /addToTrendList          (?tagPath=...) → { success: true }
+ *   /removeFromTrendList     (?tagPath=...) → { success: true }
+ *   /tagHistory              (?tagPaths=csv&rangeHours=N|startTimeMs+endTimeMs
+ *                              &pointCount=N&rawHistory=0|1)
+ *                            → { success, series:[{ tagPath, points:[{t,v}, ...] }] }
+ *
+ * Sessions:
+ *   The trend list is keyed by HTTP session ID (request.getSession()) — see
+ *   TrendListStore. One browser tab = one trend list.
  */
 public class TrendRoutes {
 
@@ -27,7 +48,9 @@ public class TrendRoutes {
     private static final String TAG_HISTORY_ROUTE = "/tagHistory";
 
     public static void mountRoutes(RouteGroup routes) {
-        // GET: return session trend list. GET-only so it works with Ignition data routes.
+        // ------------------------------------------------------------------
+        // /trendList  →  current session's tag list as { tagPaths: [...] }
+        // ------------------------------------------------------------------
         routes.newRoute(TREND_LIST_ROUTE)
             .type(RouteGroup.TYPE_JSON)
             .accessControl(Routes.requireSession(EnumSet.of(SessionScope.Client, SessionScope.Designer)))
@@ -45,7 +68,9 @@ public class TrendRoutes {
             })
             .mount();
 
-        // GET: add one tag to session trend list (data routes only accept GET).
+        // ------------------------------------------------------------------
+        // /addToTrendList?tagPath=...  →  { success } (idempotent — no dup adds)
+        // ------------------------------------------------------------------
         routes.newRoute(ADD_TO_TREND_LIST_ROUTE)
             .type(RouteGroup.TYPE_JSON)
             .accessControl(Routes.requireSession(EnumSet.of(SessionScope.Client, SessionScope.Designer)))
@@ -66,7 +91,9 @@ public class TrendRoutes {
             })
             .mount();
 
-        // GET: remove one tag from session trend list.
+        // ------------------------------------------------------------------
+        // /removeFromTrendList?tagPath=...  →  { success }
+        // ------------------------------------------------------------------
         routes.newRoute(REMOVE_FROM_TREND_LIST_ROUTE)
             .type(RouteGroup.TYPE_JSON)
             .accessControl(Routes.requireSession(EnumSet.of(SessionScope.Client, SessionScope.Designer)))
@@ -87,7 +114,17 @@ public class TrendRoutes {
             })
             .mount();
 
-        // Tag history: query via TagHistoryManager when available; returns JSON for chart.
+        // ------------------------------------------------------------------
+        // /tagHistory  → bucket-aggregated (or raw) historian data for chart
+        //
+        // Params:
+        //   tagPaths      (req)  — comma-separated tag paths
+        //   pointCount    (opt)  — bucket count, default 300
+        //   rangeHours    (opt)  — sliding window from now, default 24
+        //   startTimeMs   (opt)  — absolute window start (overrides rangeHours)
+        //   endTimeMs     (opt)  — absolute window end   (overrides rangeHours)
+        //   rawHistory    (opt)  — "1" / "true" / "yes" → no aggregation
+        // ------------------------------------------------------------------
         routes.newRoute(TAG_HISTORY_ROUTE)
             .type(RouteGroup.TYPE_JSON)
             .accessControl(Routes.requireSession(EnumSet.of(SessionScope.Client, SessionScope.Designer)))
@@ -118,8 +155,26 @@ public class TrendRoutes {
                         pointCount = Integer.parseInt(pc);
                     } catch (NumberFormatException e) { /* use default */ }
                 }
+                long startTimeMs = 0;
+                long endTimeMs   = 0;
+                String stParam = requestContext.getParameter("startTimeMs");
+                String etParam = requestContext.getParameter("endTimeMs");
+                if (stParam != null && !stParam.isEmpty() && etParam != null && !etParam.isEmpty()) {
+                    try {
+                        startTimeMs = Long.parseLong(stParam);
+                        endTimeMs   = Long.parseLong(etParam);
+                    } catch (NumberFormatException e) { /* fall back to rangeHours */ }
+                }
+                boolean rawHistory = false;
+                String rawParam = requestContext.getParameter("rawHistory");
+                if (rawParam != null && !rawParam.isEmpty()) {
+                    rawHistory = rawParam.equalsIgnoreCase("true")
+                            || rawParam.equals("1")
+                            || rawParam.equalsIgnoreCase("yes");
+                }
                 return com.example.simpletagdisplay.gateway.historian.TagHistoryQuery.query(
-                    requestContext.getGatewayContext(), tagPaths, rangeHours, pointCount);
+                    requestContext.getGatewayContext(), tagPaths, rangeHours, pointCount,
+                    startTimeMs, endTimeMs, rawHistory);
             })
             .mount();
     }

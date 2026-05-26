@@ -24,8 +24,31 @@ import com.inductiveautomation.perspective.gateway.comm.Routes;
 import jakarta.servlet.http.HttpServletResponse;
 
 /**
- * Web routes for reading tag values.
- * This provides a REST endpoint that the JavaScript component can call to read tag values.
+ * REST routes for reading + writing single tag values, and checking whether a
+ * tag is historized.
+ *
+ * Endpoints (all GET, all under /data/simpletagdisplay/):
+ *
+ *   /readTag?tagPath=...          → { success, value, quality, isGood }
+ *     Used by SimpleTagDisplay to poll its tag (~every 250 ms), by the chart
+ *     legend's "Current" column, and to read the .EngUnit property when the
+ *     tag display has showUnits enabled.
+ *
+ *   /writeTag?tagPath=...&value=  → { success } | { success:false, error }
+ *     Powers the optional setpoint write modal in SimpleTagDisplay.
+ *
+ *   /isHistorized?tagPath=...     → { historized: bool }
+ *     Read on right-click. Determines whether the "Trend Tag" / "Remove Tag"
+ *     context-menu entries should appear at all.
+ *
+ * Path parsing is a little involved because users may pass paths with or
+ * without a "[provider]" prefix and may include a property after a "."
+ * (e.g. "[default]Foo/Bar.HistoryEnabled"). The same algorithm is applied
+ * in all three handlers:
+ *   1. Parse the full path (TagPathParser).
+ *   2. Read getSource() → provider name (default "default").
+ *   3. Strip the "[provider]" prefix textually (so trailing "." property is preserved).
+ *   4. Re-parse the remainder.
  */
 public class TagReadRoutes {
 
@@ -35,8 +58,9 @@ public class TagReadRoutes {
     private static final String IS_HISTORIZED_ROUTE = "/isHistorized";
 
     public static void mountRoutes(RouteGroup routes) {
-        // Create a GET endpoint that reads a tag value
-        // Route will be accessible at /data/simpletagdisplay/readTag (or /main/data/simpletagdisplay/readTag)
+        // ------------------------------------------------------------------
+        // /readTag — single async read with 30s timeout, returns value+quality
+        // ------------------------------------------------------------------
         routes.newRoute(READ_TAG_ROUTE)
             .type(RouteGroup.TYPE_JSON)
             .accessControl(Routes.requireSession(EnumSet.of(SessionScope.Client, SessionScope.Designer)))
@@ -109,8 +133,15 @@ public class TagReadRoutes {
             })
             .mount();
 
-        // Write tag value endpoint (for setpoint feature). Uses GET with query params so the route is invoked.
-        // Path extraction matches the read route exactly; write follows IA docs (writeAsync with BasicQualifiedValue).
+        // ------------------------------------------------------------------
+        // /writeTag — setpoint write (numeric only)
+        //
+        // GET with query params (Ignition data routes don't take POST bodies easily).
+        // Value is parsed as Double; non-numeric input → 400-style error response.
+        // Bad-quality writes (read-only tag, unknown path) are surfaced as
+        // { success:false, error: "Write failed: <quality>" } so the modal can
+        // show a meaningful message instead of silently succeeding.
+        // ------------------------------------------------------------------
         routes.newRoute(WRITE_TAG_ROUTE)
             .type(RouteGroup.TYPE_JSON)
             .accessControl(Routes.requireSession(EnumSet.of(SessionScope.Client, SessionScope.Designer)))
@@ -192,7 +223,17 @@ public class TagReadRoutes {
             })
             .mount();
 
-        // Check if a tag is historized by reading TagPath.HistoryEnabled
+        // ------------------------------------------------------------------
+        // /isHistorized — read the tag's .HistoryEnabled boolean property.
+        //
+        // Result drives whether SimpleTagDisplay's right-click menu shows the
+        // "Trend Tag" / "Remove Tag" entries at all (we don't want those
+        // entries on tags the historian wouldn't return data for).
+        //
+        // Failures are silently turned into { historized: false } — same UX:
+        // the menu just doesn't show. We don't surface errors here because
+        // the user didn't take an action that requires feedback.
+        // ------------------------------------------------------------------
         routes.newRoute(IS_HISTORIZED_ROUTE)
             .type(RouteGroup.TYPE_JSON)
             .accessControl(Routes.requireSession(EnumSet.of(SessionScope.Client, SessionScope.Designer)))
@@ -251,6 +292,7 @@ public class TagReadRoutes {
             .mount();
     }
 
+    /** Build a uniform { success:false, error:<msg> } payload. JS callers check `success`. */
     private static JsonObject errorResponse(String message) {
         JsonObject response = new JsonObject();
         response.addProperty("success", false);

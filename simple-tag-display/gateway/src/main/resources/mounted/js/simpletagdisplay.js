@@ -1,76 +1,108 @@
-/**
- * Tag Display Component for Ignition Perspective
- * A component that displays tag names and values with automatic tag path parsing.
- */
+/* ============================================================================
+ * simpletagdisplay.js — CTG (Click-To-Graph) frontend for Ignition Perspective
+ * ============================================================================
+ *
+ * Single bundled file (no build step). Loaded by the gateway hook as a mounted
+ * resource at  /res/simpletagdisplay/js/simpletagdisplay.js  and registered with
+ * Perspective via window.PerspectiveClient.ComponentRegistry.
+ *
+ * It defines TWO Perspective components:
+ *
+ *   1. SimpleTagDisplay  — shows one tag's value as a label.
+ *      • Polls /readTag every 250 ms.
+ *      • Right-click on the value → context menu with "Trend Tag" / "Remove Tag"
+ *        (only when tag is historized — checked via /isHistorized).
+ *      • Optional setpoint write modal (/writeTag) when the `setpoint` prop is on.
+ *      • Bounds-based color highlighting and dynamic font sizing (ResizeObserver).
+ *      • On add/remove: dispatches `window` CustomEvent 'ctg-trend-list-changed'
+ *        so every CtgChart on the page reloads immediately.
+ *
+ *   2. CtgChart  — session-scoped trend chart rendered with uPlot.
+ *      • Reads tag list from /trendList (per-session in TrendListStore on the gateway).
+ *      • Pulls historian buckets via /tagHistory and live values via /readTag in parallel.
+ *      • Drives a sliding "now" window via explicit setScale; supports custom
+ *        historical date ranges and free-range pan/zoom that re-queries the historian.
+ *      • Three interaction modes: X-Trace (hover tooltip), Pan (drag + wheel-zoom),
+ *        Zoom (drag-select).
+ *
+ * Backend routes consumed (all under /data/simpletagdisplay or /main/data/simpletagdisplay):
+ *   - /readTag, /writeTag, /isHistorized        (TagReadRoutes.java)
+ *   - /trendList, /addToTrendList,              (TrendRoutes.java)
+ *     /removeFromTrendList, /tagHistory
+ *
+ * uPlot quirks worth knowing (these caused multiple bugs during development):
+ *   - `cursor.drag` is a partial overlay on the default object; you MUST include
+ *     `dist: 0` or drag-to-zoom never arms.
+ *   - Setting `scales.x.auto: false` skips the auto-fit pass, so a `range()`
+ *     function never gets called → we drive the x window with explicit setScale.
+ *   - `setData(data, false)` updates buffers without committing on its own; pair
+ *     it with setScale inside `uplot.batch(...)` to get a single commit/redraw.
+ *   - Anything that calls setScale internally (setData with auto, setSize, init)
+ *     fires the `setScale` hook. We use `_suppressScaleHook` to flag programmatic
+ *     calls so they're not mistaken for user-initiated zoom/pan gestures.
+ *
+ * File layout (search anchors in this file):
+ *   - "SimpleTagDisplayMeta"       — Perspective metadata for SimpleTagDisplay
+ *   - "class SimpleTagDisplay"     — implementation
+ *   - "CTG Chart"                  — section header for the chart
+ *   - "loadUPlot"                  — lazy loader for uPlot JS+CSS
+ *   - "CtgChartMeta"               — Perspective metadata for CtgChart
+ *   - "class CtgChart"             — implementation
+ * ============================================================================ */
 
 const { Component, ComponentRegistry } = window.PerspectiveClient;
 
-// Inject CSS once to allow ApexCharts tooltips to render outside the chart canvas bounds.
-// ApexCharts hard-codes overflow:hidden on .apexcharts-canvas via its own stylesheet,
-// which clips the tooltip when it appears near the bottom or edges of the chart.
-(function injectCtgStyles() {
-    const id = '__ctg-apex-styles';
-    if (document.getElementById(id)) return;
-    const s = document.createElement('style');
-    s.id = id;
-    s.textContent = [
-        '.apexcharts-tooltip { z-index: 9999 !important; }',
-        '.apexcharts-xaxistooltip { z-index: 9999 !important; }',
-        // canvas stays clipped — tooltip is pinned to 35% so it never reaches the canvas edge
-        // In X-Trace mode: lock tooltip vertically to ~middle of the plot area.
-        // ApexCharts sets top via inline style; stylesheet !important beats it.
-        // 35% of the canvas height ≈ center of the plot region (axis labels occupy top/bottom).
-        '.ctg-xtrace-active .apexcharts-tooltip { top: 35% !important; }',
-        // Hide ApexCharts' built-in toolbar — we use our own interaction mode buttons
-        '.ctg-pan-active .apexcharts-toolbar { display: none !important; }',
-        '.ctg-zoom-active .apexcharts-toolbar { display: none !important; }',
-        '.ctg-xtrace-active .apexcharts-toolbar { display: none !important; }',
-        // Cursor styling for pan mode — grabbing while dragging
-        '.ctg-pan-active .apexcharts-canvas { cursor: grab !important; }',
-        '.ctg-pan-active .apexcharts-canvas:active { cursor: grabbing !important; }',
-        // Cursor for zoom mode
-        '.ctg-zoom-active .apexcharts-canvas { cursor: crosshair !important; }',
-        // Default cursor for X-Trace mode
-        '.ctg-xtrace-active .apexcharts-canvas { cursor: default !important; }',
-    ].join('\n');
-    document.head.appendChild(s);
-})();
+
+/* ============================================================================
+ * SECTION 1 / SimpleTagDisplay
+ * ----------------------------------------------------------------------------
+ * One-tag value display with optional setpoint-write modal and a right-click
+ * context menu that calls /addToTrendList or /removeFromTrendList on the gateway.
+ * ============================================================================ */
 
 /**
- * Component Meta Object - contains information about the component
+ * Component metadata read by Perspective at registration time.
+ * - getComponentType(): unique ID matched against simpletagdisplay.props.json
+ * - getViewComponent(): the React class that actually renders.
+ * - getDefaultSize():   the W×H Perspective uses when the component is dropped
+ *                       onto a view from the palette.
+ * - getPropsReducer(tree): converts the prop tree (Perspective binds & writes)
+ *                          into a flat JS object passed as `this.props.props`.
  */
 class SimpleTagDisplayMeta {
     getComponentType() {
         return "com.example.simpletagdisplay.SimpleTagDisplay";
     }
-    
+
     getViewComponent() {
         return SimpleTagDisplay;
     }
-    
+
     getDefaultSize() {
         return {
             width: 250,
             height: 70
         };
     }
-    
+
     getPropsReducer(tree) {
+        // Each tree.read*(key, default) maps to a property defined in
+        // common/src/main/resources/simpletagdisplay.props.json.
         return {
-            tagPath: tree.readString("tagPath", ""),
+            tagPath: tree.readString("tagPath", ""),                         // full tag path e.g. "[default]Folder/MyTag"
             showTagName: tree.readBoolean("showTagName", true),
             showTagValue: tree.readBoolean("showTagValue", true),
-            tagNameLabel: tree.readString("tagNameLabel", ""),
-            valuePrecision: tree.readNumber("valuePrecision", 1),
-            row: tree.readBoolean("row", false),
-            evenRow: tree.readBoolean("evenRow", false),
+            tagNameLabel: tree.readString("tagNameLabel", ""),               // override for the displayed tag name
+            valuePrecision: tree.readNumber("valuePrecision", 1),            // decimal places for numeric values
+            row: tree.readBoolean("row", false),                             // false = stacked, true = name + value side-by-side
+            evenRow: tree.readBoolean("evenRow", false),                     // 50/50 column widths in row mode
             verticalAlign: tree.readString("verticalAlign", "top"),
-            showUnits: tree.readBoolean("showUnits", false),
-            boolean: tree.read("boolean", {
+            showUnits: tree.readBoolean("showUnits", false),                 // append .EngUnit (polled separately every 5 s)
+            boolean: tree.read("boolean", {                                   // optional textOnTrue / textOnFalse overrides
                 textOnTrue: "",
                 textOnFalse: ""
             }),
-            bounds: tree.read("bounds", {
+            bounds: tree.read("bounds", {                                     // numeric limit highlighting
                 enabled: false,
                 min: 0,
                 max: 100,
@@ -79,7 +111,7 @@ class SimpleTagDisplayMeta {
                 minInclusive: false,
                 maxInclusive: false
             }),
-            setpoint: tree.readBoolean("setpoint", false),
+            setpoint: tree.readBoolean("setpoint", false),                   // when true, clicking the value opens a write modal
             tagNameStyle: tree.read("tagNameStyle", { classes: "" }),
             tagValueStyle: tree.read("tagValueStyle", { classes: "" })
         };
@@ -87,7 +119,20 @@ class SimpleTagDisplayMeta {
 }
 
 /**
- * The Tag Display Component implementation
+ * SimpleTagDisplay — React component (Perspective extends a custom Component class).
+ *
+ * Lifecycle summary:
+ *   componentDidMount       → startPolling() + setupSizeTracking() (ResizeObserver for auto-font-sizing)
+ *   componentDidUpdate      → restart polling if tagPath changed; restart EngUnit polling if showUnits/tagPath changed
+ *   componentWillUnmount    → stopPolling() + tear down ResizeObserver and any document click handler
+ *
+ * State at a glance:
+ *   tagValue / isConnected      — last reading from /readTag (or sentinel strings)
+ *   engUnit                     — last reading of "<tagPath>.EngUnit" (only when showUnits is on)
+ *   componentWidth / Height     — observed by ResizeObserver, used for auto-font-sizing
+ *   showSetpointModal + ...     — modal state for tag writes (only with setpoint=true)
+ *   contextMenu*                — right-click menu (Trend/Remove); historized + isTrending flags
+ *                                 control what entries appear, queried lazily on right-click.
  */
 class SimpleTagDisplay extends Component {
     constructor(props) {
@@ -103,12 +148,12 @@ class SimpleTagDisplay extends Component {
             contextMenuVisible: false,
             contextMenuX: 0,
             contextMenuY: 0,
-            contextMenuHistorized: false,
-            contextMenuIsTrending: false
+            contextMenuHistorized: false,    // is this tag historized? Trend/Remove only show if true.
+            contextMenuIsTrending: false      // is this tag already in the session trend list?
         };
-        this.pollInterval = null;
-        this.engUnitInterval = null;
-        this.componentRef = null;
+        this.pollInterval = null;             // setInterval handle for /readTag (~250 ms)
+        this.engUnitInterval = null;          // setInterval handle for engineering-units poll (~5 s)
+        this.componentRef = null;             // root DOM node (used by ResizeObserver)
     }
 
     openSetpointModal = () => {
@@ -194,6 +239,15 @@ class SimpleTagDisplay extends Component {
         tryFetch(0);
     };
 
+    /* ---- Right-click context menu (Trend Tag / Remove Tag) ----------------
+     * Only opens for historized tags. Two API checks fire in parallel:
+     *   /isHistorized   — should the menu show at all?
+     *   /trendList      — is this tag already trending? (decides Trend vs Remove)
+     * Click handlers (onTrendTagClick / onRemoveTagClick) call the gateway
+     * and then dispatch a window-level CustomEvent 'ctg-trend-list-changed'
+     * so every CtgChart on the page reloads immediately, no polling delay.
+     * --------------------------------------------------------------------- */
+
     closeContextMenu = () => {
         this.setState({ contextMenuVisible: false });
     };
@@ -260,7 +314,10 @@ class SimpleTagDisplay extends Component {
         this._fetchFirstWorking([
             '/data/simpletagdisplay/addToTrendList?tagPath=' + encodeURIComponent(trimmedPath),
             '/main/data/simpletagdisplay/addToTrendList?tagPath=' + encodeURIComponent(trimmedPath)
-        ]).then(() => this.closeContextMenu());
+        ]).then(() => {
+            this.closeContextMenu();
+            window.dispatchEvent(new CustomEvent('ctg-trend-list-changed'));
+        });
     };
 
     onRemoveTagClick = () => {
@@ -270,7 +327,10 @@ class SimpleTagDisplay extends Component {
         this._fetchFirstWorking([
             '/data/simpletagdisplay/removeFromTrendList?tagPath=' + encodeURIComponent(trimmedPath),
             '/main/data/simpletagdisplay/removeFromTrendList?tagPath=' + encodeURIComponent(trimmedPath)
-        ]).then(() => this.closeContextMenu());
+        ]).then(() => {
+            this.closeContextMenu();
+            window.dispatchEvent(new CustomEvent('ctg-trend-list-changed'));
+        });
     };
 
     componentDidMount() {
@@ -922,35 +982,107 @@ class SimpleTagDisplay extends Component {
 // Register the component
 ComponentRegistry.register(new SimpleTagDisplayMeta());
 
-// --- CTG Chart (session trend chart) ---
-const CTG_PALETTE = ['#2196F3', '#FF5722', '#4CAF50', '#FF9800', '#9C27B0', '#00BCD4', '#F44336', '#8BC34A'];
-const CTG_RANGE_PRESETS = [
-    { label: '1h',  hours: 1 },
-    { label: '4h',  hours: 4 },
-    { label: '8h',  hours: 8 },
-    { label: '24h', hours: 24 },
-    { label: '3d',  hours: 72 },
-    { label: '7d',  hours: 168 },
-];
+/* ============================================================================
+ * SECTION 2 / CtgChart (session trend chart, uPlot)
+ * ----------------------------------------------------------------------------
+ * Pulls per-session trend list + historian buckets + live tag values, renders
+ * a multi-series line chart with custom toolbar, legend, X-Trace tooltip,
+ * Pan/Zoom modes, and a date-range modal supporting both rolling-window
+ * (realtime) and absolute (historical) modes.
+ * ============================================================================ */
 
-let apexChartsLoaded = null;
-function loadApexCharts() {
-    if (apexChartsLoaded) return apexChartsLoaded;
-    apexChartsLoaded = new Promise((resolve, reject) => {
-        if (window.ApexCharts) { resolve(window.ApexCharts); return; }
+// Per-pen color cycle. Index = series order in the trend list.
+const CTG_PALETTE = ['#2196F3', '#FF5722', '#4CAF50', '#FF9800', '#9C27B0', '#00BCD4', '#F44336', '#8BC34A'];
+
+// Allowed units in the Realtime tab of the date-range modal ("Show last N <unit>").
+const CTG_ROLLING_UNITS = ['seconds', 'minutes', 'hours', 'days', 'weeks', 'months', 'years'];
+
+/** Convert a rolling window (value + unit) into hours for /tagHistory's `rangeHours` param.
+ *  Returns null on invalid input.
+ *  @returns {number|null} */
+function ctgRollingToHours(value, unit) {
+    const v = parseFloat(String(value).trim());
+    if (!(v > 0) || !isFinite(v)) return null;
+    switch (unit) {
+        case 'seconds': return v / 3600;
+        case 'minutes': return v / 60;
+        case 'hours':   return v;
+        case 'days':    return v * 24;
+        case 'weeks':   return v * 24 * 7;
+        case 'months':  return v * 30 * 24;
+        case 'years':   return v * 365 * 24;
+        default:        return v;
+    }
+}
+
+/** Format an epoch-ms timestamp into the value expected by an <input type="datetime-local">
+ *  ("YYYY-MM-DDTHH:MM" in local time). Used to seed the historical tab of the date modal. */
+function ctgToDatetimeLocal(ms) {
+    const d = new Date(ms);
+    const p2 = n => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + 'T' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+}
+
+/** Pluralize a unit string for the toolbar's "Last N units" preview text.
+ *  `n=1` → singular ("hour"), otherwise plural ("hours"). */
+function ctgPluralUnit(n, unit) {
+    const x = Number(n);
+    const one = x === 1;
+    const map = {
+        seconds: one ? 'second' : 'seconds',
+        minutes: one ? 'minute' : 'minutes',
+        hours:   one ? 'hour'   : 'hours',
+        days:    one ? 'day'    : 'days',
+        weeks:   one ? 'week'   : 'weeks',
+        months:  one ? 'month'  : 'months',
+        years:   one ? 'year'   : 'years',
+    };
+    return map[unit] || unit;
+}
+
+/** Lazy-load uPlot's CSS+JS on first chart mount. The Promise is cached so subsequent
+ *  CtgChart instances reuse the already-loaded library. Resolves to the global
+ *  `uPlot` constructor. Both files live under /res/simpletagdisplay/ — bundled with
+ *  the module so the gateway works without internet (air-gapped sites). */
+let uPlotLoaded = null;
+function loadUPlot() {
+    if (uPlotLoaded) return uPlotLoaded;
+    uPlotLoaded = new Promise((resolve, reject) => {
+        if (window.uPlot) { resolve(window.uPlot); return; }
+        if (!document.getElementById('__uplot-css')) {
+            const link = document.createElement('link');
+            link.id = '__uplot-css';
+            link.rel = 'stylesheet';
+            link.href = '/res/simpletagdisplay/css/uplot.min.css';
+            document.head.appendChild(link);
+        }
         const script = document.createElement('script');
-        script.src = '/res/simpletagdisplay/js/apexcharts.min.js';
-        script.onload = () => resolve(window.ApexCharts);
-        script.onerror = () => reject(new Error('Failed to load ApexCharts'));
+        script.src = '/res/simpletagdisplay/js/uplot.min.js';
+        script.onload = () => resolve(window.uPlot);
+        script.onerror = () => reject(new Error('Failed to load uPlot'));
         document.head.appendChild(script);
     });
-    return apexChartsLoaded;
+    return uPlotLoaded;
 }
+
+/* -- CtgChart Perspective metadata ------------------------------------------- */
 
 class CtgChartMeta {
     getComponentType() { return 'com.example.simpletagdisplay.CtgChart'; }
     getViewComponent() { return CtgChart; }
     getDefaultSize() { return { width: 600, height: 400 }; }
+    /**
+     * Props (matched against ctgchart.props.json):
+     *   mode             — 'realtime' | 'historical'  (default 'realtime')
+     *   rangeHours       — sliding window size in hours (default 24)
+     *   pointCount       — historian bucket count (default 300)
+     *   rawHistory       — pass `rawHistory=1` to /tagHistory (no aggregation)
+     *   refreshRate      — silentRefresh interval in ms (default 5000)
+     *   visibility.*     — toolbar control visibility toggles
+     *   interaction.*    — default interaction mode + xtrace tooltip flag
+     *   freeRangePanZoom — when true (default), panning/wheel-zoom in realtime
+     *                      drives the historian query window (Power-Chart-like).
+     */
     getPropsReducer(tree) {
         const vis = tree.read('visibility', {});
         const interaction = tree.read('interaction', {});
@@ -958,65 +1090,161 @@ class CtgChartMeta {
             mode: tree.readString('mode', 'realtime'),
             rangeHours: tree.readNumber('rangeHours', 24),
             pointCount: tree.readNumber('pointCount', 300),
+            rawHistory: tree.readBoolean('rawHistory', false),
             refreshRate: tree.readNumber('refreshRate', 5000),
             visibility: {
-                showModeToggle:        vis.showModeToggle !== false,
-                showRangePresets:      vis.showRangePresets !== false,
-                showRefreshRateControl:vis.showRefreshRateControl !== false,
-                showRefreshButton:     vis.showRefreshButton !== false,
-                showZoomButton:        vis.showZoomButton !== false,
-                showLegend:            vis.showLegend !== false,
+                showModeToggle:         vis.showModeToggle !== false,
+                showRangePresets:       vis.showRangePresets !== false,
+                showRefreshRateControl: vis.showRefreshRateControl !== false,
+                showRefreshButton:      vis.showRefreshButton !== false,
+                showZoomButton:         vis.showZoomButton !== false,
+                showLegend:             vis.showLegend !== false,
             },
             interaction: {
                 mode: interaction.mode || 'panAndZoom',
-                xTraceVisible: interaction.xTraceVisible !== false
+                xTraceVisible: interaction.xTraceVisible !== false,
             },
         };
     }
 }
 
+/**
+ * CtgChart — uPlot-backed trend chart.
+ *
+ * High-level data flow (per silentRefresh tick or initialLoad):
+ *   1. fetchData()           → /trendList + /tagHistory       (historian buckets)
+ *   2. fetchCurrentValues()  → /readTag for each tag          (live "now" values)
+ *   3. _mergeLiveEndpoint    → append a synthetic "now" point per series so the
+ *                              line keeps moving even when historian buckets
+ *                              are still aligned to the previous tick
+ *   4. computeStats          → per-pen Current/Min/Max/Avg for the legend
+ *   5. _applyDataAndSlide    → uplot.batch( setData(false) + setScale('x', live or zoomed) )
+ *
+ * Why we drive the x window with explicit setScale (and `scales.x.auto: false`):
+ *   - Earlier we tried a `range()` callback on scales.x. uPlot called it during
+ *     drag-zoom BEFORE our setScale-hook had updated _zoomedMin/_zoomedMax, so
+ *     the live-window range was returned and the user's drag was overwritten.
+ *   - Driving the window only via explicit setScale keeps zoom/pan, custom date
+ *     range, and the live "now" slide all on the same controlled code path.
+ *
+ * Instance variables (NOT React state, mutated synchronously in interaction handlers):
+ *   chartEl              — DOM <div> we get a ref to in render(); uPlot mounts inside it
+ *   uplot                — current uPlot instance (null between createChart / _destroyChart)
+ *   refreshTimer         — setInterval handle for silentRefresh()
+ *   _zoomedMin/Max       — current x viewport in SECONDS. null = follow live "now".
+ *   _yMin/Max            — persistent Y range. Grows over the session, reset on initialLoad.
+ *   _tooltipEl, _wrapEl  — DOM owned by us but parented inside the uPlot canvas
+ *   _panState            — non-null while a drag-pan gesture is in progress
+ *   _suppressScaleHook   — flag we raise around any programmatic setScale/setData call
+ *                          so the setScale hook does NOT mistake it for a user gesture
+ *   _customStartMs/EndMs — applied custom historical date range (ms epoch). null = no override.
+ */
 class CtgChart extends Component {
     constructor(props) {
         super(props);
         this.state = {
-            status: 'loading',   // 'loading' | 'ready' | 'empty' | 'error'
-            error: null,
-            trendListPaths: [],
-            lastSeries: [],
-            seriesStats: [],
-            // Runtime overrides — user sets these via toolbar controls
-            runtimeMode: null,
-            runtimeRangeHours: null,
-            runtimeRefreshRate: null,
-            // Interaction mode: 'xtrace' | 'pan' | 'zoom'
-            interactionMode: 'xtrace',
+            // ----- Lifecycle / loading -------------------------------------
+            status: 'loading',                // 'loading' | 'ready' | 'empty' | 'error'
+            error: null,                       // string shown when status === 'error'
+            // ----- Data -----------------------------------------------------
+            trendListPaths: [],                // session tag list from /trendList
+            lastSeries: [],                    // [{ tagPath, points: [{t,v}] }, ...] from /tagHistory
+            seriesStats: [],                   // legend rows: [{ name, color, current, min, max, avg, tagPath }]
+            // ----- Runtime overrides (toolbar > props) ---------------------
+            runtimeMode: null,                 // null = use props.mode
+            runtimeRangeHours: null,           // null = use props.rangeHours
+            runtimeRefreshRate: null,          // null = use props.refreshRate
+            // ----- Interaction ---------------------------------------------
+            interactionMode: 'xtrace',         // 'xtrace' | 'pan' | 'zoom'
+            // ----- Date range state (modal + applied window text) ----------
+            customStartInput: '',              // YYYY-MM-DDTHH:MM string mirrored after apply (historical)
+            customEndInput: '',
+            dateRangeModalOpen: false,         // toolbar pill click opens this
+            modalTab: 'realtime',              // 'realtime' | 'historical'
+            modalRealtimeValue: '8',           // "Show last N <unit>" — N
+            modalRealtimeUnit: 'hours',        // unit (one of CTG_ROLLING_UNITS)
+            modalHistStart: '',                // <input type="datetime-local"> values
+            modalHistEnd: '',
+            /** Last applied rolling window (realtime); null = infer preview from getRangeHours() as hours */
+            appliedRollingValue: null,         // numeric value the user typed
+            appliedRollingUnit: null,          // matching unit (so toolbar pill says e.g. "Last 30 minutes")
         };
-        this.chartEl = null;        // DOM element ApexCharts renders into
-        this.chartInstance = null;
+        // -------- DOM / uPlot handles (NOT React state) --------------------
+        this.chartEl    = null;
+        this.uplot      = null;
         this.refreshTimer = null;
-        this._zoomedMin = null;     // track whether user has zoomed so silent refresh won't reset it
+        // -------- Scale tracking (seconds) ---------------------------------
+        this._zoomedMin = null;          // seconds; set when user has panned/zoomed
         this._zoomedMax = null;
-        this._yMin = null;          // persistent Y-range — grows but never shrinks until reset
+        this._yMin = null;               // persistent Y-range — grows but never shrinks until reset
         this._yMax = null;
-        this._lastMouseEvent = null; // last mousemove event — used to re-trigger tooltip after refresh
+        // -------- Overlay DOM owned by us ----------------------------------
+        this._tooltipEl = null;
+        this._wrapEl    = null;
+        // -------- Interaction transients -----------------------------------
+        this._panState  = null;          // { startX, scaleMin, scaleMax } while drag-panning
+        this._suppressScaleHook = false; // true during setData so auto-range doesn't overwrite zoom
+        // -------- Custom historical date range (ms epoch) ------------------
+        this._customStartMs = null;
+        this._customEndMs   = null;
     }
 
-    // --- Effective value getters (runtime overrides take priority over props) ---
+    /* ====================================================================
+     *  Effective-value getters
+     *  Toolbar runtime overrides win over Perspective props which win over
+     *  hardcoded defaults. Keeps the rest of the code from worrying about
+     *  precedence.
+     * ==================================================================== */
     getMode()        { return this.state.runtimeMode || (this.props.props || {}).mode || 'realtime'; }
     getRangeHours()  { const r = this.state.runtimeRangeHours;  return r != null ? r : ((this.props.props || {}).rangeHours  || 24); }
     getRefreshRate() { const r = this.state.runtimeRefreshRate; return r != null ? r : ((this.props.props || {}).refreshRate || 5000); }
     getPointCount()  { return (this.props.props || {}).pointCount || 300; }
+    getRawHistory()  { return !!((this.props.props || {}).rawHistory); }
+    /** Like Power Chart panAndZoom.freeRange: pan/zoom drives historian time range in realtime (default on). */
+    getFreeRangePanZoom() {
+        const v = (this.props.props || {}).freeRangePanZoom;
+        return v !== false;
+    }
     getBaseUrl()     { return window.location.pathname.includes('/main/') ? '/main/data/simpletagdisplay' : '/data/simpletagdisplay'; }
 
+    /* ====================================================================
+     *  Backend I/O
+     * ==================================================================== */
+
+    /** Tiny fetch wrapper: throws on non-2xx, returns parsed JSON. */
     fetchJson(url) {
         return fetch(url).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
     }
 
-    // Compute per-series stats (current, min, max, avg) for the legend table
-    computeStats(series) {
+    // Fetch live current values for the given tag paths in parallel.
+    // Returns a Map of tagPath → numeric value (or null on error/bad quality).
+    fetchCurrentValues(tagPaths) {
+        const paths = tagPaths || this.state.trendListPaths;
+        if (!paths || !paths.length) return Promise.resolve(new Map());
+        const readBase = window.location.pathname.includes('/main/') ? '/main/data/simpletagdisplay' : '/data/simpletagdisplay';
+        const requests = paths.map(path =>
+            fetch(readBase + '/readTag?tagPath=' + encodeURIComponent(path))
+                .then(r => r.ok ? r.json() : null)
+                .then(data => {
+                    if (data && data.success && data.isGood && data.value != null && !isNaN(data.value)) {
+                        return [path, parseFloat(data.value)];
+                    }
+                    return [path, null];
+                })
+                .catch(() => [path, null])
+        );
+        return Promise.all(requests).then(entries => new Map(entries));
+    }
+
+    // Compute per-series stats (current, min, max, avg) for the legend table.
+    // liveValues is an optional Map<tagPath, number> from fetchCurrentValues();
+    // when present it overrides the last historian bucket for the Current column
+    // (historian buckets lag by one interval and the last bucket is often 0).
+    computeStats(series, liveValues) {
         return series.map((s, idx) => {
             const vals = (s.points || []).map(p => p.v).filter(v => v != null && !isNaN(v));
-            const current = vals.length ? vals[vals.length - 1] : null;
+            const liveVal = liveValues && liveValues.get(s.tagPath);
+            const current = liveVal != null ? liveVal : (vals.length ? vals[vals.length - 1] : null);
             const min     = vals.length ? vals.reduce((a, b) => Math.min(a, b), vals[0]) : null;
             const max     = vals.length ? vals.reduce((a, b) => Math.max(a, b), vals[0]) : null;
             const avg     = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
@@ -1025,110 +1253,102 @@ class CtgChart extends Component {
         });
     }
 
-    // Fetch trend list then history for current range/pointCount settings
+    /**
+     * Fetch trend list, then historian buckets for that list.
+     *
+     * Window selection precedence:
+     *   1. _customStartMs/EndMs set    → absolute [start, end]            (historical mode)
+     *   2. freeRangePanZoom + zoomed   → [zoomed window], stretched to now
+     *                                    if the right edge is at "now" so live data
+     *                                    keeps appending into the visible viewport
+     *   3. otherwise                   → rangeHours rolling window from "now"
+     */
     fetchData() {
         const base = this.getBaseUrl();
         return this.fetchJson(base + '/trendList').then(data => {
             const tagPaths = (data && data.tagPaths) || [];
             if (!tagPaths.length) return { tagPaths: [], series: [] };
             const q = tagPaths.map(x => encodeURIComponent(x)).join(',');
-            return this.fetchJson(
-                base + '/tagHistory?tagPaths=' + q +
-                '&rangeHours=' + this.getRangeHours() +
-                '&pointCount=' + this.getPointCount()
-            ).then(h => ({ tagPaths, series: (h && h.series) || [] }));
+            let url = base + '/tagHistory?tagPaths=' + q + '&pointCount=' + this.getPointCount();
+            if (this.getRawHistory()) url += '&rawHistory=1';
+            const useToolbarRange = this._customStartMs != null && this._customEndMs != null;
+            const useFreeViewport = this.getFreeRangePanZoom()
+                && this.getMode() === 'realtime'
+                && !useToolbarRange
+                && this._zoomedMin != null
+                && this._zoomedMax != null;
+
+            if (useToolbarRange) {
+                url += '&startTimeMs=' + this._customStartMs + '&endTimeMs=' + this._customEndMs;
+            } else if (useFreeViewport) {
+                let startMs = Math.round(this._zoomedMin * 1000);
+                let endMs   = Math.round(this._zoomedMax * 1000);
+                const nowSec = Date.now() / 1000;
+                if (this._zoomedMax >= nowSec - 2) {
+                    endMs = Math.max(endMs, Date.now());
+                }
+                if (endMs > startMs) {
+                    url += '&startTimeMs=' + startMs + '&endTimeMs=' + endMs;
+                } else {
+                    url += '&rangeHours=' + this.getRangeHours();
+                }
+            } else {
+                url += '&rangeHours=' + this.getRangeHours();
+            }
+            return this.fetchJson(url).then(h => ({ tagPaths, series: (h && h.series) || [] }));
         });
     }
 
-    // Full load — shows loading spinner, recreates chart when done.
-    // Always starts the realtime timer on completion so it runs even in empty state.
-    initialLoad() {
-        this.stopTimer();
-        // Reset Y-range, zoom, and trace position so the new time window starts clean
-        this._yMin = null;
-        this._yMax = null;
-        this._zoomedMin = null;
-        this._zoomedMax = null;
-        this._lastMouseEvent = null;
-        this.setState({ status: 'loading', error: null });
-        this.fetchData()
-            .then(({ tagPaths, series }) => {
-                this.setState({
-                    status: tagPaths.length === 0 ? 'empty' : 'ready',
-                    trendListPaths: tagPaths,
-                    lastSeries: series,
-                    seriesStats: this.computeStats(series),
-                }, () => {
-                    // Start timer regardless of empty/ready — silentRefresh handles the
-                    // empty→ready transition when the user adds their first tag.
-                    this.startTimer();
-                    // Legend may have changed row count — sync the chart height after layout.
-                    requestAnimationFrame(() => this._syncChartHeight());
-                });
-            })
-            .catch(err => this.setState({ status: 'error', error: (err && err.message) || 'Failed to load' }));
-    }
-
-    // Background refresh — no loading state, respects user zoom.
-    // Also handles the case where tags are added while the chart is in empty state.
-    silentRefresh() {
-        if (this.getMode() !== 'realtime') return;
-        this.fetchData()
-            .then(({ tagPaths, series }) => {
-                const wasEmpty = this.state.status === 'empty';
-                this.setState({ trendListPaths: tagPaths, lastSeries: series, seriesStats: this.computeStats(series) }, () => {
-                    requestAnimationFrame(() => this._syncChartHeight());
-                });
-
-                // Tags were added while we were showing the empty state — transition to ready.
-                // The chart div will mount and setChartEl will call createChart automatically.
-                if (wasEmpty && tagPaths.length > 0) {
-                    this.setState({ status: 'ready' });
-                    return;
+    // Convert backend series [{tagPath, points:[{t(ms), v}]}] → uPlot data array.
+    // uPlot format: [ timestamps_sec[], vals0[], vals1[], ... ] aligned to the same timestamp spine.
+    toUPlotData(series) {
+        if (!series || !series.length) return [[]];
+        const tsSet = new Set();
+        series.forEach(s => (s.points || []).forEach(p => { if (p.t != null) tsSet.add(p.t); }));
+        const tsSorted = Array.from(tsSet).sort((a, b) => a - b);
+        const tsSec    = tsSorted.map(t => t / 1000);
+        const idxMap   = new Map(tsSorted.map((t, i) => [t, i]));
+        const uData    = [tsSec];
+        for (const s of series) {
+            const arr = new Array(tsSorted.length).fill(null);
+            for (const p of (s.points || [])) {
+                if (p.t != null) {
+                    const i = idxMap.get(p.t);
+                    if (i !== undefined) arr[i] = (p.v != null && !isNaN(p.v)) ? p.v : null;
                 }
-
-                if (!this.chartInstance) return;
-
-                // Expand persistent Y-range with any new extremes in this tick's data
-                this.expandYRange(series);
-
-                // Push series + yaxis + xaxis in one updateOptions call to avoid
-                // double-rendering (which caused the alternating scale flicker).
-                const xRange = this.computeXRange(series);
-                const now = Date.now();
-                const rangeMs = this.getRangeHours() * 3600 * 1000;
-                const opts = { yaxis: this.getYAxisOptions() };
-                if (!this._zoomedMin && !this._zoomedMax) {
-                    opts.xaxis = {
-                        type: 'datetime',
-                        min: xRange.minX != null ? xRange.minX : now - rangeMs,
-                        max: xRange.maxX != null ? xRange.maxX : now,
-                    };
-                }
-                // Single updateOptions call (with series embedded) = one redraw per tick instead
-                // of two, which eliminates the double-blink on the crosshair/tooltip.
-                this.chartInstance.updateOptions(
-                    { ...opts, series: this.prepareApexSeries(series) },
-                    false,  // redrawPaths — false keeps paths, series key handles data update
-                    false   // animate
-                ).then(() => {
-                    // In X-Trace mode: re-dispatch the last known mousemove so ApexCharts
-                    // re-shows the tooltip at the same position with the freshly updated values.
-                    this._retriggerXTrace();
-                });
-            })
-            .catch(() => {});  // silent fail — don't disrupt the user
+            }
+            uData.push(arr);
+        }
+        return uData;
     }
 
-    startTimer() {
-        this.stopTimer();
-        if (this.getMode() !== 'realtime') return;
-        const rate = this.getRefreshRate();
-        if (rate > 0) this.refreshTimer = setInterval(() => this.silentRefresh(), rate);
+    /**
+     * Historian uses bucket-aligned end times (TagHistoryQuery); between refresh ticks the
+     * returned points are often identical, so the plot looks frozen. Live /readTag values
+     * already update the stats table — append one point at Date.now() per tag so uPlot moves
+     * on every poll (startTimer → silentRefresh at refreshRate ms).
+     */
+    // Append /readTag “now” point for realtime polish; skip when free-range viewport is entirely in the past.
+    _shouldAppendLiveReadToSeries() {
+        if (this.getMode() !== 'realtime') return true;
+        if (!this.getFreeRangePanZoom()) return true;
+        if (this._zoomedMin == null || this._zoomedMax == null) return true;
+        const nowSec = Date.now() / 1000;
+        return this._zoomedMax >= nowSec - 2;
     }
 
-    stopTimer() {
-        if (this.refreshTimer) { clearInterval(this.refreshTimer); this.refreshTimer = null; }
+    _mergeLiveEndpoint(series, liveValues) {
+        if (!series || !series.length || !liveValues || liveValues.size === 0) return series;
+        if (!this._shouldAppendLiveReadToSeries()) return series;
+        const now = Date.now();
+        return series.map(s => {
+            const live = liveValues.get(s.tagPath);
+            if (live == null || isNaN(live)) return s;
+            return {
+                tagPath: s.tagPath,
+                points: [...(s.points || []), { t: now, v: live }],
+            };
+        });
     }
 
     // Expand the persistent Y-range to cover any new data — never shrinks on its own.
@@ -1142,367 +1362,803 @@ class CtgChart extends Component {
         }
     }
 
-    // Build the yaxis options using the persistent range so ApexCharts never
-    // snaps back to a narrower scale between refresh ticks.
-    getYAxisOptions() {
-        if (this._yMin === null || this._yMax === null) {
-            return { labels: { formatter: val => val != null ? Number(val).toFixed(2) : '' }, forceNiceScale: true };
+    /* ====================================================================
+     *  Lifecycle: load / refresh / chart create+destroy
+     * ==================================================================== */
+
+    // Full load — shows loading spinner, recreates chart when done.
+    initialLoad() {
+        this.stopTimer();
+        this._yMin = null;
+        this._yMax = null;
+        // Pin x window to custom date range when set; otherwise let range() use now.
+        if (this._customStartMs != null && this._customEndMs != null) {
+            this._zoomedMin = this._customStartMs / 1000;
+            this._zoomedMax = this._customEndMs   / 1000;
+        } else {
+            this._zoomedMin = null;
+            this._zoomedMax = null;
         }
-        const span    = this._yMax - this._yMin || Math.abs(this._yMax) || 1;
-        const padding = span * 0.05;
-        return {
-            min: this._yMin - padding,
-            max: this._yMax + padding,
-            labels: { formatter: val => val != null ? Number(val).toFixed(2) : '' },
-            forceNiceScale: true,
-        };
+        this.setState({ status: 'loading', error: null });
+        this.fetchData().then(result => Promise.all([result, this.fetchCurrentValues(result.tagPaths)]))
+            .then(([{ tagPaths, series }, liveValues]) => {
+                const newStatus = tagPaths.length === 0 ? 'empty' : 'ready';
+                this.setState({
+                    status: newStatus,
+                    trendListPaths: tagPaths,
+                    lastSeries: series,
+                    seriesStats: this.computeStats(series, liveValues),
+                }, () => {
+                    // Poll historian + live reads at refreshRate (see startTimer / silentRefresh).
+                    this.startTimer();
+                    // Chart mount: componentDidUpdate (→ ready) or setChartEl; reload remounts after loading.
+                });
+            })
+            .catch(err => this.setState({ status: 'error', error: (err && err.message) || 'Failed to load' }));
     }
 
-    prepareApexSeries(series) {
-        return (series || []).map(s => ({
-            name: (s.tagPath || '').split('/').pop() || 'Tag',
-            data: (s.points || []).map(pt => ({ x: pt.t, y: pt.v })),
-        }));
+    // Background refresh — no loading state, respects user zoom.
+    silentRefresh() {
+        if (this.getMode() !== 'realtime') return;
+        // Fetch historian data, then live current values for the same tag set, in parallel
+        this.fetchData().then(result => Promise.all([result, this.fetchCurrentValues(result.tagPaths)]))
+            .then(([{ tagPaths, series }, liveValues]) => {
+                const wasEmpty = this.state.status === 'empty';
+                const stats = this.computeStats(series, liveValues);
+                this.setState({ trendListPaths: tagPaths, lastSeries: series, seriesStats: stats });
+
+                if (wasEmpty && tagPaths.length > 0) {
+                    this.setState({ status: 'ready' });
+                    return;
+                }
+
+                if (!this.uplot) return;
+
+                // If series count changed (pen added/removed), recreate the chart.
+                // setData with wrong array count silently errors and stops all future updates.
+                if (this.uplot.series.length - 1 !== series.length) {
+                    this.createChart(this._mergeLiveEndpoint(series, liveValues));
+                    return;
+                }
+
+                const chartSeries = this._mergeLiveEndpoint(series, liveValues);
+                this.expandYRange(chartSeries);
+                this._applyDataAndSlide(chartSeries);
+            })
+            .catch(() => {});
     }
 
-    computeXRange(series) {
-        let minX = null, maxX = null;
-        for (const s of (series || [])) {
-            for (const pt of (s.points || [])) {
-                if (pt.t == null) continue;
-                if (minX === null || pt.t < minX) minX = pt.t;
-                if (maxX === null || pt.t > maxX) maxX = pt.t;
+    // Push new data into the chart and update the x window.
+    // When the user has zoomed/panned (_zoomedMin set), hold their view.
+    // Otherwise slide the window to [now - rangeHours, now] so the line advances in realtime.
+    _applyDataAndSlide(series) {
+        if (!this.uplot) return;
+        const uData = this.toUPlotData(series);
+        const plot = this.uplot;
+        // Single batch => one _commit: setData(false) does not commit alone; nested setScale+commit()
+        // calls are no-ops while queuedCommit is true, so batch avoids missed redraws.
+        this._suppressScaleHook = true;
+        plot.batch((u) => {
+            u.setData(uData, false);
+            if (this._zoomedMin != null) {
+                u.setScale('x', { min: this._zoomedMin, max: this._zoomedMax });
+            } else {
+                const nowSec = Date.now() / 1000;
+                u.setScale('x', { min: nowSec - this.getRangeHours() * 3600, max: nowSec });
             }
-        }
-        return { minX, maxX };
+        });
+        this._suppressScaleHook = false;
     }
 
-    buildChartOptions(series) {
+    startTimer() {
+        this.stopTimer();
+        if (this.getMode() !== 'realtime') return;
+        const rate = this.getRefreshRate();
+        if (rate > 0) this.refreshTimer = setInterval(() => this.silentRefresh(), rate);
+    }
+
+    stopTimer() {
+        if (this.refreshTimer) { clearInterval(this.refreshTimer); this.refreshTimer = null; }
+    }
+
+    /* ====================================================================
+     *  uPlot configuration
+     *  Constructed fresh on each createChart() so series count, interaction
+     *  mode (cursor.drag), axis formatters, and hooks all line up.
+     * ==================================================================== */
+
+    // Build uPlot opts for the current series + interaction mode
+    buildUPlotOpts(series, width, height) {
         const iMode = this.state.interactionMode;
-        const xRange = this.computeXRange(series);
-        const now = Date.now();
-        const rangeMs = this.getRangeHours() * 3600 * 1000;
-        this.expandYRange(series);   // seed persistent range from initial data
+        this.expandYRange(series);
 
-        // --- Mode-specific chart config ---
-        const chartConfig = this._getChartConfigForMode(iMode);
+        const uSeries = [{}];  // slot 0 = x (timestamps)
+        for (let i = 0; i < series.length; i++) {
+            uSeries.push({
+                label: (series[i].tagPath || '').split('/').pop() || 'Tag',
+                stroke: CTG_PALETTE[i % CTG_PALETTE.length],
+                width: 2,
+                spanGaps: false,
+            });
+        }
 
+        const self = this;
         return {
-            chart: {
-                type: 'line',
-                height: '100%',
-                width: '100%',
-                zoom: chartConfig.zoom,
-                toolbar: chartConfig.toolbar,
-                animations: { enabled: false },
-                redrawOnParentResize: true,
-                redrawOnWindowResize: true,
-                events: {
-                    // Mouse tracking is handled by DOM listeners in _setupXTraceListeners —
-                    // do NOT duplicate here (causes conflicts with the synthetic re-dispatch).
-                    zoomed: (ctx, { xaxis }) => {
-                        this._zoomedMin = xaxis.min;
-                        this._zoomedMax = xaxis.max;
-                        // In zoom mode, recalculate Y-axis for the zoomed range
-                        if (this.state.interactionMode === 'zoom') {
-                            this._recalcYForRange(xaxis.min, xaxis.max);
+            width,
+            height,
+            // Disable path cache so series geometry always rebuilds after setData (avoids stale frames).
+            cache: false,
+            series: uSeries,
+            scales: {
+                x: {
+                    time: true,
+                    // We drive the viewport only via setScale (sliding live window / zoom / pan).
+                    auto: false,
+                },
+                y: {
+                    range: (_u, dmin, dmax) => {
+                        if (self._yMin !== null && self._yMax !== null) {
+                            const span = self._yMax - self._yMin || Math.abs(self._yMax) || 1;
+                            const pad  = span * 0.05;
+                            return [self._yMin - pad, self._yMax + pad];
                         }
+                        const pad = (dmax - dmin) * 0.05 || Math.abs(dmax) * 0.05 || 1;
+                        return [dmin - pad, dmax + pad];
                     },
-                    scrolled:        (ctx, { xaxis }) => { this._zoomedMin = xaxis.min; this._zoomedMax = xaxis.max; },
-                    beforeResetZoom: ()               => { this._zoomedMin = null; this._zoomedMax = null; },
                 },
             },
-            colors: CTG_PALETTE,
-            series: this.prepareApexSeries(series),
-            xaxis: {
-                type: 'datetime',
-                labels: { show: true },
-                tickAmount: 6,
-                min: xRange.minX != null ? xRange.minX : now - rangeMs,
-                max: xRange.maxX != null ? xRange.maxX : now,
-            },
-            yaxis: this.getYAxisOptions(),
-            stroke: { curve: 'smooth', width: 2 },
-            dataLabels: { enabled: false },
-            markers: { size: 0 },
-            legend: { show: false },   // replaced by custom stats table below
-            tooltip: chartConfig.tooltip,
-            grid: { borderColor: '#e7e7e7', row: { colors: ['#f3f3f3', 'transparent'], opacity: 0.5 }, padding: { bottom: 20 } },
-            crosshairs: chartConfig.crosshairs,
-        };
-    }
-
-    // Returns mode-specific ApexCharts sub-configs for zoom, tooltip, crosshairs, toolbar
-    _getChartConfigForMode(iMode) {
-        if (iMode === 'xtrace') {
-            return {
-                zoom: { enabled: false },
-                toolbar: { show: false },
-                tooltip: {
-                    enabled: true,
-                    shared: true,
-                    intersect: false,
-                    x: { format: 'yyyy/MM/dd HH:mm:ss' },
-                    // Tooltip follows cursor horizontally; vertical position is locked
-                    // by the CSS !important rule in injectCtgStyles().
-                    fixed: { enabled: false },
+            axes: [
+                {
+                    // x-axis: HH:MM labels
+                    values: (_u, vals) => vals.map(v => {
+                        if (v == null) return '';
+                        const d = new Date(v * 1000);
+                        return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+                    }),
                 },
-                crosshairs: {
-                    show: true,
-                    width: 1,
-                    position: 'back',
-                    stroke: { color: '#999', width: 1, dashArray: 3 },
+                {
+                    values: (_u, vals) => vals.map(v => v != null ? Number(v).toFixed(2) : ''),
                 },
-            };
-        }
-        if (iMode === 'pan') {
-            return {
-                // Pan requires zoom enabled — ApexCharts treats pan as an alt-tool within the zoom feature
-                zoom: { enabled: true, type: 'x', autoScaleYaxis: false },
-                // Toolbar must exist for pan tool to be selectable; hide it with CSS
-                toolbar: { show: true, autoSelected: 'pan' },
-                tooltip: { enabled: false },
-                crosshairs: { show: false },
-            };
-        }
-        // zoom mode
-        return {
-            zoom: { enabled: true, type: 'x', autoScaleYaxis: false },
-            toolbar: { show: true, autoSelected: 'zoom' },
-            tooltip: { enabled: false },
-            crosshairs: {
+            ],
+            cursor: {
                 show: true,
-                width: 1,
-                position: 'back',
-                stroke: { color: '#4CAF50', width: 1, dashArray: 3 },
+                // uPlot does assign({}, cursorOpts, { drag: { y } }, opts.cursor) — a partial `drag`
+                // replaces the whole default object. Defaults include dist: 0; without it, rawDX >= drag.dist
+                // is false and drag-to-zoom never arms (see uPlot mousemove selection logic).
+                drag: {
+                    x: iMode === 'zoom',
+                    y: false,
+                    setScale: iMode === 'zoom',
+                    dist: 0,
+                    uni: null,
+                },
+            },
+            legend: { show: false },
+            hooks: {
+                setCursor: [(u) => self._updateTooltip(u)],
+                // Capture user-initiated x scale changes (zoom drag, pan) into _zoomedMin/Max
+                // so the range() function can preserve them across redraws.
+                // _suppressScaleHook is set true during setData so the auto-range
+                // recalculation doesn't get misinterpreted as a user gesture.
+                setScale: [(u, key) => {
+                    if (key !== 'x' || self._suppressScaleHook) return;
+                    self._zoomedMin = u.scales.x.min;
+                    self._zoomedMax = u.scales.x.max;
+                }],
             },
         };
     }
 
-    // Recalculate Y-axis range for only the data points within the given X range
-    _recalcYForRange(xMin, xMax) {
-        if (!this.chartInstance) return;
-        let yMin = null, yMax = null;
-        for (const s of (this.state.lastSeries || [])) {
-            for (const pt of (s.points || [])) {
-                if (pt.t == null || pt.v == null || isNaN(pt.v)) continue;
-                if (pt.t < xMin || pt.t > xMax) continue;
-                if (yMin === null || pt.v < yMin) yMin = pt.v;
-                if (yMax === null || pt.v > yMax) yMax = pt.v;
-            }
+    // Update the floating tooltip overlay using uPlot's cursor state
+    _updateTooltip(u) {
+        if (!this._tooltipEl) return;
+        if (this.state.interactionMode !== 'xtrace') { this._tooltipEl.style.display = 'none'; return; }
+
+        const idx = u.cursor.idx;
+        if (idx == null || !u.data[0] || u.data[0].length === 0) { this._tooltipEl.style.display = 'none'; return; }
+
+        const ts   = u.data[0][idx];
+        const d    = new Date(ts * 1000);
+        const p2   = n => String(n).padStart(2, '0');
+        const time = d.getFullYear() + '/' + p2(d.getMonth() + 1) + '/' + p2(d.getDate()) +
+                     ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes()) + ':' + p2(d.getSeconds());
+
+        const stats = this.state.seriesStats;
+        let html = '<div style="font-weight:bold;margin-bottom:4px;border-bottom:1px solid #eee;padding-bottom:3px;font-size:11px">' + time + '</div>';
+        for (let i = 1; i < u.series.length; i++) {
+            const val       = u.data[i] ? u.data[i][idx] : null;
+            const color     = CTG_PALETTE[(i - 1) % CTG_PALETTE.length];
+            const name      = stats && stats[i - 1] ? stats[i - 1].name : ('Series ' + i);
+            const formatted = val != null ? Number(val).toFixed(2) : '—';
+            html += '<div style="display:flex;align-items:center;gap:5px">' +
+                    '<span style="width:8px;height:8px;border-radius:50%;background:' + color + ';flex-shrink:0;display:inline-block"></span>' +
+                    '<span>' + name + ': ' + formatted + '</span></div>';
         }
-        if (yMin !== null && yMax !== null) {
-            this._yMin = yMin;
-            this._yMax = yMax;
-            this.chartInstance.updateOptions({ yaxis: this.getYAxisOptions() }, false, false);
-        }
+        this._tooltipEl.innerHTML = html;
+
+        // Tooltip is parented to u.over so cursor.left/top are already in the right space.
+        const cursorLeft = u.cursor.left;
+        const plotW      = (u.bbox.width / (window.devicePixelRatio || 1));
+        const ttW        = this._tooltipEl.offsetWidth || 160;
+        const flipLeft   = cursorLeft + ttW + 20 > plotW;
+        this._tooltipEl.style.left    = (flipLeft ? cursorLeft - ttW - 8 : cursorLeft + 12) + 'px';
+        this._tooltipEl.style.top     = '10px';
+        this._tooltipEl.style.display = 'block';
     }
 
-    // Create (or recreate) the ApexCharts instance inside this.chartEl
-    createChart(series) {
+    // Create (or recreate) the uPlot instance inside this.chartEl
+    // opts.preserveXViewport: keep _zoomedMin/_zoomedMax (caller sets them) — used when only
+    // interaction mode changes so Pan/Zoom/X-Trace do not reset the x window.
+    createChart(series, opts) {
+        opts = opts || {};
         const el = this.chartEl;
         if (!el) return;
-        this._teardownXTraceListeners();
-        loadApexCharts().then(ApexCharts => {
-            if (!el || el !== this.chartEl) return;   // stale — element changed before promise resolved
-            if (this.chartInstance) { try { this.chartInstance.destroy(); } catch (_) {} this.chartInstance = null; }
-            this.chartInstance = new ApexCharts(el, this.buildChartOptions(series));
-            return this.chartInstance.render().then(() => {
-                this._applyCursorForMode(this.state.interactionMode);
-                this._setupXTraceListeners();
-                requestAnimationFrame(() => this._syncChartHeight());
+        this._destroyChart();
+
+        // uPlot's init can fire setScale hooks; if _zoomedMin gets set from that, silentRefresh
+        // holds a fixed x window and the plot stops sliding with "now" until Reset Zoom clears it.
+        // Default for live realtime (no custom toolbar range) is always the sliding window.
+        if (!opts.preserveXViewport
+            && this.getMode() === 'realtime'
+            && (this._customStartMs == null || this._customEndMs == null)) {
+            this._zoomedMin = null;
+            this._zoomedMax = null;
+        }
+
+        loadUPlot().then(UPlot => {
+            if (!el || el !== this.chartEl) return;  // stale ref
+
+            const w    = el.clientWidth  || 600;
+            const h    = el.clientHeight || 300;
+            const opts = this.buildUPlotOpts(series, w, h);
+
+            // uPlot mounts into a wrapper div so we can overlay the tooltip
+            const wrap = document.createElement('div');
+            wrap.style.cssText = 'position:relative;width:100%;height:100%';
+            el.appendChild(wrap);
+            this._wrapEl = wrap;
+
+            // Keep hook suppressed through ctor + first explicit setScale. If we clear suppress
+            // between `new UPlot` and that setScale, init commits capture scales.x into _zoomedMin
+            // and the chart freezes (Reset Zoom fixes by nulling those — match that by default).
+            this._suppressScaleHook = true;
+            const data = this.toUPlotData(series);
+            this.uplot = new UPlot(opts, data, wrap);
+
+            // Apply cursor style for the current mode
+            const cursors = { xtrace: 'default', pan: 'grab', zoom: 'crosshair' };
+            wrap.style.cursor = cursors[this.state.interactionMode] || 'default';
+
+            // Floating tooltip overlay — parented to u.over so cursor.left is in the
+            // same coordinate space with no offset calculation needed.
+            this._tooltipEl = document.createElement('div');
+            this._tooltipEl.style.cssText = [
+                'position:absolute', 'background:rgba(255,255,255,0.95)',
+                'border:1px solid #ccc', 'border-radius:4px', 'padding:6px 10px',
+                'font-size:12px', 'pointer-events:none', 'display:none',
+                'z-index:9999', 'white-space:nowrap',
+                'box-shadow:0 2px 6px rgba(0,0,0,0.15)', 'font-family:Arial,sans-serif',
+            ].join(';');
+            this.uplot.over.appendChild(this._tooltipEl);
+            // Allow tooltip to extend past the plot (nested views often clip overflow).
+            this.uplot.over.style.overflow = 'visible';
+
+            this._setupPanListeners(wrap);
+
+            // Initial x window (still under suppress — hook must not treat this as user zoom).
+            if (this._zoomedMin != null) {
+                this.uplot.setScale('x', { min: this._zoomedMin, max: this._zoomedMax });
+            } else {
+                const nowSec = Date.now() / 1000;
+                this.uplot.setScale('x', { min: nowSec - this.getRangeHours() * 3600, max: nowSec });
+            }
+            this._suppressScaleHook = false;
+
+            requestAnimationFrame(() => {
+                if (!this.uplot) return;
+                this._suppressScaleHook = true;
+                this._syncChartSize();
+                this._suppressScaleHook = false;
             });
         }).catch(() => {
             this.setState({ status: 'error', error: 'Chart library failed to load' });
         });
     }
 
-    // --- X-Trace persistence via native DOM listeners ---
-    // ApexCharts only shows the tooltip during mousemove. We need it to persist while
-    // the cursor hovers the chart even if the mouse is stationary. We do this by
-    // periodically re-dispatching a synthetic mousemove at the last known position.
-    _setupXTraceListeners() {
-        this._teardownXTraceListeners();
-        if (!this.chartEl) return;
-        const canvas = this.chartEl.querySelector('.apexcharts-canvas');
-        if (!canvas) return;
-        this._xtraceCanvas = canvas;
-
-        this._onXTraceMouseMove = (e) => {
-            this._lastMouseEvent = e;
-        };
-        this._onXTraceMouseLeave = () => {
-            this._lastMouseEvent = null;
-            this._stopXTraceHoldLoop();
-        };
-        this._onXTraceMouseEnter = () => {
-            if (this.state.interactionMode === 'xtrace') {
-                this._startXTraceHoldLoop();
-            }
-        };
-
-        canvas.addEventListener('mousemove', this._onXTraceMouseMove);
-        canvas.addEventListener('mouseleave', this._onXTraceMouseLeave);
-        canvas.addEventListener('mouseenter', this._onXTraceMouseEnter);
+    _destroyChart() {
+        this._teardownPanListeners();
+        this._tooltipEl = null;  // removed automatically when uplot.destroy() cleans up u.over
+        if (this.uplot) { try { this.uplot.destroy(); } catch (_) {} this.uplot = null; }
+        if (this._wrapEl) { this._wrapEl.remove(); this._wrapEl = null; }
     }
 
-    _teardownXTraceListeners() {
-        this._stopXTraceHoldLoop();
-        if (this._xtraceCanvas) {
-            if (this._onXTraceMouseMove)  this._xtraceCanvas.removeEventListener('mousemove',  this._onXTraceMouseMove);
-            if (this._onXTraceMouseLeave) this._xtraceCanvas.removeEventListener('mouseleave', this._onXTraceMouseLeave);
-            if (this._onXTraceMouseEnter) this._xtraceCanvas.removeEventListener('mouseenter', this._onXTraceMouseEnter);
-            this._xtraceCanvas = null;
+    /* ====================================================================
+     *  Interaction: Pan + Wheel-zoom (only active in 'pan' interaction mode)
+     *  Drag-to-zoom in 'zoom' mode is handled natively by uPlot's cursor.drag.
+     * ==================================================================== */
+
+    // Pan: mousedown+drag on the wrap div shifts the x scale; wheel on plot zooms x around cursor.
+    _setupPanListeners(wrap) {
+        this._teardownPanListeners();
+        this._panTarget = wrap;
+
+        this._onPanMouseDown = (e) => {
+            if (this.state.interactionMode !== 'pan' || !this.uplot) return;
+            e.preventDefault();
+            const xs = this.uplot.scales.x;
+            this._panState = { startX: e.clientX, scaleMin: xs.min, scaleMax: xs.max };
+            wrap.style.cursor = 'grabbing';
+        };
+        this._onPanMouseMove = (e) => {
+            if (!this._panState || !this.uplot) return;
+            const dx    = e.clientX - this._panState.startX;
+            const plotW = this.uplot.bbox.width / (window.devicePixelRatio || 1);
+            const span  = this._panState.scaleMax - this._panState.scaleMin;
+            const dSec  = -(dx / plotW) * span;
+            this._zoomedMin = this._panState.scaleMin + dSec;
+            this._zoomedMax = this._panState.scaleMax + dSec;
+            this._suppressScaleHook = true;
+            this.uplot.setScale('x', { min: this._zoomedMin, max: this._zoomedMax });
+            this._suppressScaleHook = false;
+        };
+        this._onPanMouseUp = () => {
+            if (!this._panState) return;
+            this._panState = null;
+            if (this._panTarget) this._panTarget.style.cursor = 'grab';
+        };
+
+        // Wheel zoom (x-axis) only in Pan mode — focal point follows cursor along the plot width.
+        this._panWheelTarget = this.uplot && this.uplot.over;
+        this._onPanWheel = (e) => {
+            if (this.state.interactionMode !== 'pan' || !this.uplot) return;
+            if (!e.deltaY) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const u = this.uplot;
+            const xs = u.scales.x;
+            if (xs.min == null || xs.max == null) return;
+            const min = xs.min;
+            const max = xs.max;
+            const span = max - min;
+            if (!(span > 0)) return;
+
+            const dpr = window.devicePixelRatio || 1;
+            const plotW = u.bbox.width / dpr;
+            if (!(plotW > 0)) return;
+            const rect = u.over.getBoundingClientRect();
+            let rx = (e.clientX - rect.left) / plotW;
+            if (rx < 0) rx = 0;
+            if (rx > 1) rx = 1;
+
+            // Trackpad sends smaller deltas; normalize roughly to one "notch" ~ 100.
+            const step = 0.12 * Math.min(2.5, Math.max(1, Math.abs(e.deltaY) / 100));
+            // deltaY > 0: scroll down → zoom out (wider window). deltaY < 0: zoom in.
+            const factor = e.deltaY > 0 ? (1 + step) : (1 / (1 + step));
+            let newSpan = span * factor;
+            const minSpan = Math.max(1, span / 400);
+            const maxSpan = Math.min(span * 800, 10 * 365 * 24 * 3600);
+            newSpan = Math.max(minSpan, Math.min(maxSpan, newSpan));
+
+            const focal = min + rx * span;
+            const newMin = focal - rx * newSpan;
+            const newMax = focal + (1 - rx) * newSpan;
+
+            this._zoomedMin = newMin;
+            this._zoomedMax = newMax;
+            this._suppressScaleHook = true;
+            u.setScale('x', { min: newMin, max: newMax });
+            this._suppressScaleHook = false;
+        };
+
+        wrap.addEventListener('mousedown', this._onPanMouseDown);
+        window.addEventListener('mousemove', this._onPanMouseMove);
+        window.addEventListener('mouseup',   this._onPanMouseUp);
+        if (this._panWheelTarget && this._onPanWheel) {
+            this._panWheelTarget.addEventListener('wheel', this._onPanWheel, { passive: false });
         }
     }
 
-    // A small interval that re-fires mousemove so the tooltip stays visible even when the
-    // mouse is stationary. Runs only while the cursor is inside the chart in X-Trace mode.
-    // Also repositions the tooltip if it clips outside the chart bounds.
-    _startXTraceHoldLoop() {
-        this._stopXTraceHoldLoop();
-        this._xtraceHoldTimer = setInterval(() => {
-            if (this.state.interactionMode !== 'xtrace' || !this._lastMouseEvent) {
-                this._stopXTraceHoldLoop();
-                return;
-            }
-            this._retriggerXTrace();
-        }, 100);  // 10 fps — smooth enough, lightweight
-    }
-
-    // Tooltip vertical positioning is handled entirely by CSS (!important rule in injectCtgStyles).
-    // No JS override needed — the stylesheet rule beats ApexCharts' inline top.
-
-    _stopXTraceHoldLoop() {
-        if (this._xtraceHoldTimer) { clearInterval(this._xtraceHoldTimer); this._xtraceHoldTimer = null; }
+    _teardownPanListeners() {
+        if (this._panWheelTarget && this._onPanWheel) {
+            this._panWheelTarget.removeEventListener('wheel', this._onPanWheel);
+            this._panWheelTarget = null;
+            this._onPanWheel = null;
+        }
+        if (this._panTarget) {
+            if (this._onPanMouseDown) this._panTarget.removeEventListener('mousedown', this._onPanMouseDown);
+            this._panTarget = null;
+        }
+        if (this._onPanMouseMove) window.removeEventListener('mousemove', this._onPanMouseMove);
+        if (this._onPanMouseUp)   window.removeEventListener('mouseup',   this._onPanMouseUp);
+        this._panState = null;
     }
 
     // Ref callback — fires when the chart container div mounts or unmounts
     setChartEl = (el) => {
         if (el) {
             this.chartEl = el;
-            if (this.state.status === 'ready') this.createChart(this.state.lastSeries);
+            // First paint: componentDidUpdate also builds the chart (avoids double createChart).
         } else {
-            this._teardownXTraceListeners();
+            this._destroyChart();
             this.chartEl = null;
             this.stopTimer();
-            if (this.chartInstance) { try { this.chartInstance.destroy(); } catch (_) {} this.chartInstance = null; }
         }
     };
 
-    // Read the chart body div's actual rendered height and push it to ApexCharts so the
-    // chart fills the div exactly. Only calls updateOptions when the height changed to avoid
-    // unnecessary redraws. Called after setState so the legend has already re-rendered.
-    _syncChartHeight() {
-        if (!this.chartInstance || !this.chartEl) return;
-        const h = this.chartEl.offsetHeight;
-        if (h > 0 && h !== this._lastChartHeight) {
-            this._lastChartHeight = h;
-            this.chartInstance.updateOptions({ chart: { height: h } }, false, false);
+    _syncChartSize() {
+        if (!this.uplot || !this.chartEl) return;
+        const w = this.chartEl.clientWidth;
+        const h = this.chartEl.clientHeight;
+        if (w > 0 && h > 0 && (w !== this.uplot.width || h !== this.uplot.height)) {
+            // setSize can trigger uPlot's x setScale internally; without suppress, the setScale
+            // hook treats that as user zoom and locks _zoomedMin/_zoomedMax — live view stops
+            // sliding until Reset zoom (ResizeObserver often fires after add/remove pen).
+            const prevSuppress = this._suppressScaleHook;
+            this._suppressScaleHook = true;
+            try {
+                this.uplot.setSize({ width: w, height: h });
+            } finally {
+                this._suppressScaleHook = prevSuppress;
+            }
         }
     }
 
+    /* ====================================================================
+     *  React lifecycle
+     * ==================================================================== */
+
     componentDidMount() {
         this.initialLoad();
+        // React to tag add/remove events fired by SimpleTagDisplay components on this page.
+        this._onTrendListChanged = () => this.initialLoad();
+        window.addEventListener('ctg-trend-list-changed', this._onTrendListChanged);
+        if (window.ResizeObserver) {
+            this._resizeObserver = new ResizeObserver(() => this._syncChartSize());
+        }
     }
 
     componentDidUpdate(prevProps, prevState) {
-        // Restart timer when mode or refresh rate changes
         const prevMode = prevState.runtimeMode !== null ? prevState.runtimeMode : ((prevProps.props || {}).mode || 'realtime');
         const prevRate = prevState.runtimeRefreshRate != null ? prevState.runtimeRefreshRate : ((prevProps.props || {}).refreshRate || 5000);
-        if ((prevMode !== this.getMode() || prevRate !== this.getRefreshRate()) && this.chartInstance) {
+        if ((prevMode !== this.getMode() || prevRate !== this.getRefreshRate()) && this.uplot) {
             this.startTimer();
+        }
+        // Mount chart after loading/empty → ready (ref may run in the same commit).
+        if (prevState.status !== 'ready' && this.state.status === 'ready' && this.chartEl && !this.uplot) {
+            this.fetchCurrentValues(this.state.trendListPaths).then(live => {
+                if (!this.chartEl || this.uplot || this.state.status !== 'ready') return;
+                this.createChart(this._mergeLiveEndpoint(this.state.lastSeries, live));
+            });
+        }
+        // Attach ResizeObserver once chartEl is available
+        if (this._resizeObserver && this.chartEl && !this._roAttached) {
+            this._resizeObserver.observe(this.chartEl);
+            this._roAttached = true;
         }
     }
 
     componentWillUnmount() {
         this.stopTimer();
-        this._teardownXTraceListeners();
-        if (this.chartInstance) { try { this.chartInstance.destroy(); } catch (_) {} this.chartInstance = null; }
+        this._destroyChart();
+        window.removeEventListener('ctg-trend-list-changed', this._onTrendListChanged);
+        if (this._resizeObserver) { this._resizeObserver.disconnect(); this._resizeObserver = null; }
     }
 
+    /* ====================================================================
+     *  Toolbar / user-action handlers
+     * ==================================================================== */
+
     // --- User action handlers ---
-    handleModeChange      = (mode)  => this.setState({ runtimeMode: mode },         () => this.initialLoad());
-    handleRangePreset     = (hours) => this.setState({ runtimeRangeHours: hours },   () => this.initialLoad());
-    handleRefreshRateChange = (val) => {
+    handleRefreshRateChange = (val)   => {
         const parsed = parseInt(val, 10);
-        if (!isNaN(parsed) && parsed >= 0) this.setState({ runtimeRefreshRate: parsed }, () => { if (this.chartInstance) this.startTimer(); });
+        if (!isNaN(parsed) && parsed >= 0) this.setState({ runtimeRefreshRate: parsed }, () => { if (this.uplot) this.startTimer(); });
     };
-    handleManualRefresh   = ()      => this.initialLoad();
+    handleManualRefresh = () => this.initialLoad();
+
+    getDateRangePreviewText() {
+        if (this.getMode() === 'historical' && this._customStartMs != null && this._customEndMs != null) {
+            const a = new Date(this._customStartMs);
+            const b = new Date(this._customEndMs);
+            const o = { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' };
+            return a.toLocaleString(undefined, o) + ' – ' + b.toLocaleString(undefined, o);
+        }
+        const u = this.state.appliedRollingUnit || 'hours';
+        const v = this.state.appliedRollingValue != null
+            ? this.state.appliedRollingValue
+            : this.getRangeHours();
+        const displayV = typeof v === 'number' && !Number.isInteger(v) ? Math.round(v * 1000) / 1000 : v;
+        return 'Last ' + displayV + ' ' + ctgPluralUnit(displayV, u);
+    }
+
+    openDateRangeModal = () => {
+        const mode = this.getMode();
+        const histActive = mode === 'historical' && this._customStartMs != null && this._customEndMs != null;
+        const tab = histActive ? 'historical' : 'realtime';
+        let modalRealtimeValue = '8';
+        let modalRealtimeUnit = 'hours';
+        if (!histActive) {
+            if (this.state.appliedRollingValue != null && this.state.appliedRollingUnit) {
+                modalRealtimeValue = String(this.state.appliedRollingValue);
+                modalRealtimeUnit = this.state.appliedRollingUnit;
+            } else {
+                const h = this.getRangeHours();
+                modalRealtimeValue = String(Math.round(h * 1000000) / 1000000);
+                modalRealtimeUnit = 'hours';
+            }
+        }
+        let modalHistStart = this.state.modalHistStart;
+        let modalHistEnd = this.state.modalHistEnd;
+        if (this._customStartMs != null && this._customEndMs != null) {
+            modalHistStart = ctgToDatetimeLocal(this._customStartMs);
+            modalHistEnd = ctgToDatetimeLocal(this._customEndMs);
+        } else if (!modalHistStart || !modalHistEnd) {
+            const now = Date.now();
+            modalHistStart = ctgToDatetimeLocal(now - 24 * 3600 * 1000);
+            modalHistEnd = ctgToDatetimeLocal(now);
+        }
+        this.setState({
+            dateRangeModalOpen: true,
+            modalTab: tab,
+            modalRealtimeValue,
+            modalRealtimeUnit,
+            modalHistStart,
+            modalHistEnd,
+        });
+    };
+
+    closeDateRangeModal = () => this.setState({ dateRangeModalOpen: false });
+
+    applyDateRangeModal = () => {
+        if (this.state.modalTab === 'realtime') {
+            const hours = ctgRollingToHours(this.state.modalRealtimeValue, this.state.modalRealtimeUnit);
+            if (hours == null || hours <= 0) return;
+            const val = parseFloat(String(this.state.modalRealtimeValue).trim());
+            this._customStartMs = null;
+            this._customEndMs = null;
+            this.setState({
+                runtimeMode: 'realtime',
+                runtimeRangeHours: hours,
+                appliedRollingValue: val,
+                appliedRollingUnit: this.state.modalRealtimeUnit,
+                customStartInput: '',
+                customEndInput: '',
+                dateRangeModalOpen: false,
+            }, () => this.initialLoad());
+        } else {
+            const startMs = new Date(this.state.modalHistStart).getTime();
+            const endMs = new Date(this.state.modalHistEnd).getTime();
+            if (isNaN(startMs) || isNaN(endMs) || startMs >= endMs) return;
+            this._customStartMs = startMs;
+            this._customEndMs = endMs;
+            this.setState({
+                runtimeMode: 'historical',
+                customStartInput: this.state.modalHistStart,
+                customEndInput: this.state.modalHistEnd,
+                dateRangeModalOpen: false,
+            }, () => this.initialLoad());
+        }
+    };
 
     handleRemovePen = (tagPath) => {
         const url = this.getBaseUrl() + '/removeFromTrendList?tagPath=' + encodeURIComponent(tagPath);
-        fetch(url, { method: 'GET', credentials: 'same-origin' })
-            .finally(() => this.initialLoad());
+        fetch(url, { method: 'GET', credentials: 'same-origin' }).finally(() => this.initialLoad());
     };
 
     resetZoom = () => {
-        if (!this.chartInstance) return;
-        this._zoomedMin = null;
-        this._zoomedMax = null;
-        // Recalculate Y-range from current data only (discards old extremes)
+        if (!this.uplot) return;
+        // Restore to the custom date range if one is applied, otherwise go live.
+        if (this._customStartMs != null && this._customEndMs != null) {
+            this._zoomedMin = this._customStartMs / 1000;
+            this._zoomedMax = this._customEndMs   / 1000;
+        } else {
+            this._zoomedMin = null;
+            this._zoomedMax = null;
+        }
         this._yMin = null;
         this._yMax = null;
-        this.expandYRange(this.state.lastSeries);
-        const xRange = this.computeXRange(this.state.lastSeries);
-        const now = Date.now();
-        const rangeMs = this.getRangeHours() * 3600 * 1000;
-        this.chartInstance.updateOptions({
-            xaxis: {
-                type: 'datetime',
-                min: xRange.minX != null ? xRange.minX : now - rangeMs,
-                max: xRange.maxX != null ? xRange.maxX : now,
-            },
-            yaxis: this.getYAxisOptions(),
-        }, false, true);
+        const plot = this.uplot;
+        this.fetchCurrentValues(this.state.trendListPaths).then(live => {
+            if (!this.uplot || this.uplot !== plot) return;
+            const chartSeries = this._mergeLiveEndpoint(this.state.lastSeries, live);
+            this.expandYRange(chartSeries);
+            const uData = this.toUPlotData(chartSeries);
+            this._suppressScaleHook = true;
+            this.uplot.batch((u) => {
+                u.setData(uData, false);
+                if (this._zoomedMin != null) {
+                    u.setScale('x', { min: this._zoomedMin, max: this._zoomedMax });
+                } else {
+                    const nowSec = Date.now() / 1000;
+                    u.setScale('x', { min: nowSec - this.getRangeHours() * 3600, max: nowSec });
+                }
+            });
+            this._suppressScaleHook = false;
+        });
     };
-
-    // Re-dispatch the last known mousemove at the same screen coordinates so ApexCharts
-    // re-shows the tooltip with freshly updated series values without requiring mouse movement.
-    _retriggerXTrace() {
-        if (this.state.interactionMode !== 'xtrace' || !this._lastMouseEvent || !this.chartEl) return;
-        const canvas = this.chartEl.querySelector('.apexcharts-canvas');
-        if (!canvas) return;
-        canvas.dispatchEvent(new MouseEvent('mousemove', {
-            clientX: this._lastMouseEvent.clientX,
-            clientY: this._lastMouseEvent.clientY,
-            bubbles: true,
-            cancelable: true,
-        }));
-    }
-
-    // Apply the current interaction mode to a live chart instance (called after mode button click).
-    // Instead of trying to programmatically click toolbar buttons, we destroy and recreate
-    // the chart — ApexCharts' toolbar.autoSelected only takes effect at creation time.
-    _applyInteractionMode() {
-        if (!this.chartInstance) return;
-        // Recreate the chart so autoSelected (pan/zoom) takes effect cleanly
-        this.createChart(this.state.lastSeries);
-    }
-
-    // Set CSS class on the chart container so cursor rules from the injected stylesheet apply.
-    // Using classes (not inline styles) so the :active pseudo-class works for grab→grabbing.
-    _applyCursorForMode(iMode) {
-        if (!this.chartEl) return;
-        this.chartEl.classList.remove('ctg-xtrace-active', 'ctg-pan-active', 'ctg-zoom-active');
-        if (iMode === 'xtrace') this.chartEl.classList.add('ctg-xtrace-active');
-        if (iMode === 'pan')    this.chartEl.classList.add('ctg-pan-active');
-        if (iMode === 'zoom')   this.chartEl.classList.add('ctg-zoom-active');
-    }
 
     handleInteractionModeChange = (iMode) => {
-        this._lastMouseEvent = null;  // clear stale position when switching modes
-        this._stopXTraceHoldLoop();
-        this.setState({ interactionMode: iMode }, () => this._applyInteractionMode());
+        this._panState = null;
+        let xMin = null, xMax = null;
+        if (this.uplot && this.uplot.scales.x) {
+            const x = this.uplot.scales.x;
+            const min = x.min, max = x.max;
+            if (min != null && max != null && Number.isFinite(min) && Number.isFinite(max) && max > min) {
+                xMin = min;
+                xMax = max;
+            }
+        }
+        this.setState({ interactionMode: iMode }, () => {
+            if (!this.chartEl || !this.uplot) return;
+            if (xMin == null || xMax == null) {
+                const x = this.uplot.scales.x;
+                const min = x.min, max = x.max;
+                if (min != null && max != null && Number.isFinite(min) && Number.isFinite(max) && max > min) {
+                    xMin = min;
+                    xMax = max;
+                }
+            }
+            this.fetchCurrentValues(this.state.trendListPaths).then(live => {
+                if (!this.chartEl) return;
+                const preserve = xMin != null && xMax != null;
+                if (preserve) {
+                    this._zoomedMin = xMin;
+                    this._zoomedMax = xMax;
+                }
+                this.createChart(this._mergeLiveEndpoint(this.state.lastSeries, live), { preserveXViewport: preserve });
+            });
+        });
     };
 
+    /* ====================================================================
+     *  Render helpers (toolbar pill icons, date-range modal, toolbar, legend)
+     * ==================================================================== */
+
     // --- Render helpers ---
+    ctgDateRangeIcon() {
+        return React.createElement('svg', {
+            width: 20, height: 20, viewBox: '0 0 24 24', 'aria-hidden': true,
+            style: { flexShrink: 0 },
+        },
+            React.createElement('path', {
+                fill: '#1976D2',
+                d: 'M7 2a1 1 0 0 1 1 1v1h8V3a1 1 0 1 1 2 0v1h1a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h1V3a1 1 0 0 1 1-1zm0 5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1H7zm8 5.5a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0zm-3.5 1.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2z',
+            }),
+        );
+    }
+
+    ctgChevronDownIcon() {
+        return React.createElement('svg', { width: 12, height: 12, viewBox: '0 0 12 12', style: { flexShrink: 0 } },
+            React.createElement('path', { fill: '#1976D2', d: 'M2.5 4.5L6 8l3.5-3.5H2.5z' }),
+        );
+    }
+
+    renderDateRangeModal() {
+        if (!this.state.dateRangeModalOpen) return null;
+        const tab = this.state.modalTab;
+        const inp = { padding: '6px 8px', fontSize: '13px', border: '1px solid #ccc', borderRadius: 4 };
+        const inpRt = {
+            padding: '5px 8px', fontSize: '12px', border: '1px solid #c5c5c5', borderRadius: 4,
+            background: '#fff', color: '#333', boxSizing: 'border-box',
+        };
+        const tabBase = { flex: 1, padding: '10px 12px', fontSize: '13px', cursor: 'pointer', border: 'none', background: 'transparent', fontWeight: 600 };
+        const tabActive = { ...tabBase, color: '#222', borderBottom: '3px solid #2196F3', marginBottom: '-2px' };
+        const tabIdle = { ...tabBase, color: '#888', borderBottom: '3px solid transparent' };
+        const btnCancel = { padding: '8px 18px', fontSize: '13px', cursor: 'pointer', border: '1px solid #ccc', borderRadius: 4, background: '#fff' };
+        const btnApply = { padding: '8px 18px', fontSize: '13px', cursor: 'pointer', border: '1px solid #1976D2', borderRadius: 4, background: '#2196F3', color: '#fff', fontWeight: 600 };
+
+        const modalWidth = tab === 'realtime'
+            ? 'min(320px, calc(100vw - 32px))'
+            : 'min(440px, calc(100vw - 32px))';
+
+        return React.createElement('div', {
+            key: 'date-range-overlay',
+            style: {
+                position: 'fixed', left: 0, top: 0, right: 0, bottom: 0,
+                background: 'rgba(0,0,0,0.35)', zIndex: 20000,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+            },
+            onClick: this.closeDateRangeModal,
+        },
+            React.createElement('div', {
+                style: {
+                    background: '#fff', borderRadius: 8, boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+                    width: modalWidth, maxHeight: 'calc(100vh - 48px)', overflow: 'hidden',
+                },
+                onClick: (e) => e.stopPropagation(),
+            },
+                React.createElement('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#424242', color: '#fff', padding: '10px 14px' } },
+                    React.createElement('span', { style: { fontSize: '14px', fontWeight: 600 } }, 'Set Date Range'),
+                    React.createElement('button', {
+                        type: 'button',
+                        onClick: this.closeDateRangeModal,
+                        style: { border: 'none', background: 'transparent', color: '#fff', fontSize: '20px', lineHeight: 1, cursor: 'pointer', padding: '0 4px' },
+                    }, '×'),
+                ),
+                React.createElement('div', { style: { display: 'flex', borderBottom: '1px solid #e0e0e0' } },
+                    React.createElement('button', {
+                        type: 'button', style: tab === 'realtime' ? tabActive : tabIdle,
+                        onClick: () => this.setState({ modalTab: 'realtime' }),
+                    }, 'Realtime'),
+                    React.createElement('button', {
+                        type: 'button', style: tab === 'historical' ? tabActive : tabIdle,
+                        onClick: () => this.setState({ modalTab: 'historical' }),
+                    }, 'Historical'),
+                ),
+                React.createElement('div', {
+                    style: tab === 'realtime'
+                        ? { padding: '20px 20px 18px', textAlign: 'center' }
+                        : { padding: '16px 18px', minHeight: 140 },
+                },
+                    tab === 'realtime'
+                        ? React.createElement('div', {
+                            style: {
+                                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
+                                maxWidth: 260, margin: '0 auto',
+                            },
+                        },
+                            React.createElement('span', {
+                                style: { fontSize: '11px', color: '#888', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' },
+                            }, 'Rolling window'),
+                            React.createElement('div', {
+                                style: {
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    flexWrap: 'wrap', gap: '6px 8px', width: '100%',
+                                },
+                            },
+                                React.createElement('span', { style: { fontSize: '12px', color: '#444' } }, 'Show last'),
+                                React.createElement('input', {
+                                    type: 'number', min: 0.001, step: 'any',
+                                    value: this.state.modalRealtimeValue,
+                                    onChange: e => this.setState({ modalRealtimeValue: e.target.value }),
+                                    style: { ...inpRt, width: 56, textAlign: 'center' },
+                                }),
+                                React.createElement('select', {
+                                    value: this.state.modalRealtimeUnit,
+                                    onChange: e => this.setState({ modalRealtimeUnit: e.target.value }),
+                                    style: { ...inpRt, minWidth: 0, width: 'auto', maxWidth: 118, cursor: 'pointer' },
+                                }, ...CTG_ROLLING_UNITS.map(u =>
+                                    React.createElement('option', { key: u, value: u }, u.charAt(0).toUpperCase() + u.slice(1)),
+                                )),
+                            ),
+                        )
+                        : React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
+                            React.createElement('label', { style: { fontSize: '12px', color: '#555' } }, 'Start',
+                                React.createElement('input', {
+                                    type: 'datetime-local',
+                                    value: this.state.modalHistStart,
+                                    onChange: e => this.setState({ modalHistStart: e.target.value }),
+                                    style: { ...inp, display: 'block', width: '100%', marginTop: 4, colorScheme: 'light' },
+                                }),
+                            ),
+                            React.createElement('label', { style: { fontSize: '12px', color: '#555' } }, 'End',
+                                React.createElement('input', {
+                                    type: 'datetime-local',
+                                    value: this.state.modalHistEnd,
+                                    onChange: e => this.setState({ modalHistEnd: e.target.value }),
+                                    style: { ...inp, display: 'block', width: '100%', marginTop: 4, colorScheme: 'light' },
+                                }),
+                            ),
+                        ),
+                ),
+                React.createElement('div', {
+                    style: {
+                        display: 'flex', justifyContent: 'flex-end', gap: 8,
+                        padding: tab === 'realtime' ? '10px 16px 14px' : '12px 18px 16px',
+                        borderTop: '1px solid #eee', background: '#fafafa',
+                    },
+                },
+                    React.createElement('button', { type: 'button', style: btnCancel, onClick: this.closeDateRangeModal }, 'Cancel'),
+                    React.createElement('button', { type: 'button', style: btnApply, onClick: this.applyDateRangeModal }, 'Apply'),
+                ),
+            ),
+        );
+    }
+
     renderToolbar() {
         const vis = ((this.props.props || {}).visibility) || {};
-        const mode        = this.getMode();
-        const rangeHours  = this.getRangeHours();
-        const refreshRate = this.getRefreshRate();
         const { status } = this.state;
+        const mode        = this.getMode();
+        const refreshRate = this.getRefreshRate();
 
         const tb  = { flexShrink: 0, padding: '6px 10px', fontSize: '12px', background: '#f0f0f0', borderBottom: '1px solid #ccc', display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', userSelect: 'none' };
         const btn = { padding: '3px 8px', fontSize: '12px', cursor: 'pointer', border: '1px solid #ccc', borderRadius: 3, background: '#fff', lineHeight: '1.4' };
@@ -1513,20 +2169,24 @@ class CtgChart extends Component {
         const iMode = this.state.interactionMode;
         const left = [];
 
-        if (vis.showModeToggle !== false) {
-            left.push(lbl('Mode:', 'lm'));
-            left.push(React.createElement('button', { key: 'mRT',   style: mode === 'realtime'   ? abn : btn, onClick: () => this.handleModeChange('realtime')   }, 'Realtime'));
-            left.push(React.createElement('button', { key: 'mHist', style: mode === 'historical' ? abn : btn, onClick: () => this.handleModeChange('historical') }, 'Historical'));
-            left.push(sep('s1'));
-        }
-
-        if (vis.showRangePresets !== false) {
-            left.push(lbl('Range:', 'lr'));
-            CTG_RANGE_PRESETS.forEach(p => {
-                const active = Math.abs(rangeHours - p.hours) < 0.001;
-                left.push(React.createElement('button', { key: 'rp' + p.label, style: active ? abn : btn, onClick: () => this.handleRangePreset(p.hours) }, p.label));
-            });
-            left.push(sep('s2'));
+        const showDateRange = vis.showRangePresets !== false || vis.showModeToggle !== false;
+        if (showDateRange) {
+            left.push(React.createElement('button', {
+                key: 'datePreview',
+                type: 'button',
+                onClick: this.openDateRangeModal,
+                style: {
+                    display: 'inline-flex', alignItems: 'center', gap: 8,
+                    padding: '4px 10px 4px 6px', fontSize: '13px', fontWeight: 600,
+                    color: '#1976D2', background: '#fff', border: '1px solid #90caf9', borderRadius: 4,
+                    cursor: 'pointer', lineHeight: 1.3,
+                },
+            },
+                this.ctgDateRangeIcon(),
+                React.createElement('span', null, this.getDateRangePreviewText()),
+                this.ctgChevronDownIcon(),
+            ));
+            left.push(sep('sDr'));
         }
 
         if (vis.showRefreshRateControl !== false && mode === 'realtime') {
@@ -1619,20 +2279,21 @@ class CtgChart extends Component {
 
         let body;
         if (status === 'loading') {
-            body = React.createElement('div', { key: 'body', style: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' } }, 'Loading…');
+            body = React.createElement('div', { key: 'body-loading', style: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' } }, 'Loading…');
         } else if (status === 'error') {
-            body = React.createElement('div', { key: 'body', style: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c00', padding: 16, textAlign: 'center' } }, error || 'Error');
+            body = React.createElement('div', { key: 'body-error', style: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c00', padding: 16, textAlign: 'center' } }, error || 'Error');
         } else if (status === 'empty') {
-            body = React.createElement('div', { key: 'body', style: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888', padding: 16, textAlign: 'center' } },
+            body = React.createElement('div', { key: 'body-empty', style: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888', padding: 16, textAlign: 'center' } },
                 'No tags in trend list. Right-click a historized tag value → Trend Tag.');
         } else {
-            body = React.createElement('div', { key: 'body', ref: this.setChartEl, style: { flex: 1, minHeight: 0, overflow: 'hidden' } });
+            body = React.createElement('div', { key: 'body-chart', ref: this.setChartEl, style: { flex: 1, minHeight: 0, overflow: 'hidden' } });
         }
 
         return React.createElement('div', { ...emittedProps, style: containerStyle },
             this.renderToolbar(),
             body,
             status === 'ready' ? this.renderLegend() : null,
+            this.renderDateRangeModal(),
         );
     }
 }

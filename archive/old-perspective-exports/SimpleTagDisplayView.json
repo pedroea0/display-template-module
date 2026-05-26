@@ -1,0 +1,248 @@
+{
+  "custom": {
+    "TagName": {
+      "display": true,
+      "text": "Tag Name"
+    },
+    "TagValue": {
+      "display": true,
+      "text": "Loading...",
+      "rawValue": null
+    },
+    "loadDone": false
+  },
+  "events": {
+    "system": {
+      "onStartup": {
+        "config": {
+          "script": "\tself.custom.loadDone = False"
+        },
+        "scope": "G",
+        "type": "script"
+      }
+    }
+  },
+  "params": {
+    "TagPath": "",
+    "showTagName": true,
+    "showTagValue": true
+  },
+  "propConfig": {
+    "custom.TagName": {
+      "persistent": true
+    },
+    "custom.TagName.display": {
+      "binding": {
+        "config": {
+          "expression": "{view.params.showTagName} && {view.custom.loadDone}"
+        },
+        "type": "expr"
+      },
+      "persistent": true
+    },
+    "custom.TagName.text": {
+      "binding": {
+        "config": {
+          "path": "view.params.TagPath"
+        },
+        "transforms": [
+          {
+            "code": "\t# Extract tag name from path\n\tif value and value.strip():\n\t\t# Remove provider prefix if present [ProviderName]\n\t\tpath = value.split(']')[-1] if ']' in value else value\n\t\t# Get the last part of the path as the tag name\n\t\tparts = path.split('/')\n\t\tif parts:\n\t\t\treturn parts[-1]\n\treturn 'No Tag Selected'",
+            "type": "script"
+          }
+        ],
+        "type": "property"
+      },
+      "persistent": true
+    },
+    "custom.TagValue": {
+      "persistent": true
+    },
+    "custom.TagValue.display": {
+      "binding": {
+        "config": {
+          "expression": "{view.params.showTagValue} && {view.custom.loadDone}"
+        },
+        "type": "expr"
+      },
+      "persistent": true
+    },
+    "custom.TagValue.text": {
+      "binding": {
+        "config": {
+          "struct": {
+            "tagValue": "{view.custom.TagValue.rawValue}",
+            "tagPath": "{view.params.TagPath}"
+          },
+          "waitOnAll": true
+        },
+        "transforms": [
+          {
+            "code": "\ttagValue = value.tagValue\n\ttagPath = value.tagPath\n\n\t# If no tag path is provided, show placeholder\n\tif not tagPath or not tagPath.strip():\n\t\tself.custom.loadDone = True\n\t\treturn 'No Tag Path' \n\n\t# If tag value is None, show disconnected\n\tif tagValue is None:\n\t\tself.custom.loadDone = True\n\t\treturn 'Disconnected'\n\n\t# Format the value based on type\n\tif isinstance(tagValue, bool):\n\t\tself.custom.loadDone = True\n\t\treturn 'True' if tagValue else 'False'\n\telif isinstance(tagValue, (int, float)):\n\t\tself.custom.loadDone = True\n\t\treturn str(tagValue)\n\telse:\n\t\tself.custom.loadDone = True\n\t\treturn str(tagValue)",
+            "type": "script"
+          }
+        ],
+        "type": "expr-struct"
+      },
+      "persistent": true
+    },
+    "custom.TagValue.rawValue": {
+      "binding": {
+        "config": {
+          "fallbackDelay": 2.5,
+          "mode": "indirect",
+          "references": {
+            "TagPath": "{view.params.TagPath}"
+          },
+          "tagPath": "{TagPath}"
+        },
+        "type": "tag"
+      }
+    },
+    "params.TagPath": {
+      "paramDirection": "input",
+      "persistent": true
+    },
+    "params.showTagName": {
+      "paramDirection": "input",
+      "persistent": true
+    },
+    "params.showTagValue": {
+      "paramDirection": "input",
+      "persistent": true
+    },
+    "props.defaultSize.height": {
+      "binding": {
+        "config": {
+          "expression": "if({view.params.showTagName} && {view.params.showTagValue}, 60, 30)"
+        },
+        "type": "expr"
+      },
+      "persistent": true
+    },
+    "props.defaultSize.width": {
+      "binding": {
+        "config": {
+          "expression": "200"
+        },
+        "type": "expr"
+      },
+      "persistent": true
+    }
+  },
+  "props": {
+    "defaultSize": {
+      "height": 60,
+      "width": 200
+    }
+  },
+  "root": {
+    "children": [
+      {
+        "meta": {
+          "name": "lbl_tag_name"
+        },
+        "propConfig": {
+          "position.display": {
+            "binding": {
+              "config": {
+                "expression": "{view.custom.TagName.display}"
+              },
+              "type": "expr"
+            },
+            "persistent": true
+          },
+          "props.text": {
+            "binding": {
+              "config": {
+                "path": "view.custom.TagName.text"
+              },
+              "type": "property"
+            },
+            "persistent": true
+          }
+        },
+        "props": {
+          "style": {
+            "classes": "global/ControlScreen/Label"
+          },
+          "text": "Tag Name",
+          "textStyle": {
+            "textAlign": "left",
+            "fontWeight": "bold"
+          }
+        },
+        "type": "ia.display.label"
+      },
+      {
+        "meta": {
+          "name": "lbl_tag_value"
+        },
+        "propConfig": {
+          "position.display": {
+            "binding": {
+              "config": {
+                "expression": "{view.custom.TagValue.display}"
+              },
+              "type": "expr"
+            },
+            "persistent": true
+          },
+          "props.text": {
+            "binding": {
+              "config": {
+                "path": "view.custom.TagValue.text"
+              },
+              "type": "property"
+            },
+            "persistent": true
+          }
+        },
+        "props": {
+          "style": {
+            "classes": "global/ControlScreen/Value"
+          },
+          "text": "Loading...",
+          "textStyle": {
+            "textAlign": "left"
+          }
+        },
+        "type": "ia.display.label"
+      }
+    ],
+    "events": {
+      "dom": {
+        "onContextMenu": {
+          "config": {
+            "script": "\t# Prevent browser context menu\n\tpass"
+          },
+          "preventDefault": true,
+          "scope": "G",
+          "type": "script"
+        }
+      }
+    },
+    "meta": {
+      "name": "root"
+    },
+    "propConfig": {
+      "props.direction": {
+        "binding": {
+          "config": {
+            "expression": "'column'"
+          },
+          "type": "expr"
+        },
+        "persistent": true
+      }
+    },
+    "props": {
+      "direction": "column",
+      "style": {
+        "cursor": "auto",
+        "overflow": "hidden"
+      }
+    },
+    "type": "ia.container.flex"
+  }
+}

@@ -18,8 +18,20 @@ import com.example.simpletagdisplay.common.SimpleTagDisplayModule;
 import com.example.simpletagdisplay.common.CtgChartComponent;
 
 /**
- * Designer-scope module hook for Tag Display module.
- * This module provides a component for displaying tag names and values.
+ * Designer-scope entry point for the Tag Display module.
+ *
+ * Mirror of SimpleTagDisplayGatewayHook but for the Designer's own component
+ * registry — that's what populates the component palette you drag from when
+ * editing a Perspective view in the Designer.
+ *
+ * Differences from the gateway hook:
+ *   - Each descriptor is REBUILT here with an icon URL set on its palette entry.
+ *     The base descriptors in `common/` set the icon to null because converting
+ *     SVG → BufferedImage only makes sense in the Designer scope.
+ *   - getResourceIcon() supplies the icon shown next to nodes in the project
+ *     browser tree.
+ *
+ * Lifecycle: startup() registers, shutdown() unregisters.
  */
 public class SimpleTagDisplayDesignerHook extends AbstractDesignerModuleHook {
     

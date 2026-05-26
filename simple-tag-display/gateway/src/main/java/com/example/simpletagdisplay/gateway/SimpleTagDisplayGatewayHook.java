@@ -15,30 +15,53 @@ import com.example.simpletagdisplay.gateway.routes.TagReadRoutes;
 import com.example.simpletagdisplay.gateway.routes.TrendRoutes;
 
 /**
- * Gateway-scope module hook for Tag Display module.
- * This module provides a component for displaying tag names and values.
+ * Gateway-scope entry point for the Tag Display module.
+ *
+ * Ignition calls these methods at module lifecycle events:
+ *   setup(context)        — once after install. Cache the GatewayContext.
+ *   startup(licenseState) — once on gateway startup or module install.
+ *                           Register both Perspective components and mount routes.
+ *   shutdown()            — on gateway shutdown or module uninstall. Unregister.
+ *   mountRouteHandlers()  — declares the HTTP routes our JS calls.
+ *   getMountedResourceFolder() / getMountPathAlias() — make
+ *     gateway/src/main/resources/mounted/  visible at  /res/simpletagdisplay/.
+ *
+ * Two components are registered, both backed by simpletagdisplay.js:
+ *   - SimpleTagDisplayComponent (one-tag value display)
+ *   - CtgChartComponent         (session trend chart, uPlot)
+ *
+ * Two route groups are mounted (paths under /data/simpletagdisplay/):
+ *   - TagReadRoutes   → /readTag, /writeTag, /isHistorized
+ *   - TrendRoutes     → /trendList, /addToTrendList,
+ *                       /removeFromTrendList, /tagHistory
  */
 public class SimpleTagDisplayGatewayHook extends AbstractGatewayModuleHook {
-    
+
     private static final LoggerEx log = LoggerEx.newBuilder().build("com.example.simpletagdisplay.gateway.SimpleTagDisplayGatewayHook");
-    
+
     private GatewayContext gatewayContext;
     private PerspectiveContext perspectiveContext;
     private ComponentRegistry componentRegistry;
-    
+
+    /** Called once when the module is installed. Just cache context for startup(). */
     @Override
     public void setup(GatewayContext context) {
         this.gatewayContext = context;
         log.info("Setting up Tag Display module.");
     }
 
+    /**
+     * Called when the gateway starts (or this module is enabled). Pulls the
+     * Perspective ComponentRegistry and registers our two component descriptors.
+     * If the registry is missing the module is effectively dead — log loudly.
+     */
     @Override
     public void startup(LicenseState activationState) {
         log.info("Starting up Tag Display module!");
-        
+
         this.perspectiveContext = PerspectiveContext.get(this.gatewayContext);
         this.componentRegistry = this.perspectiveContext.getComponentRegistry();
-        
+
         if (this.componentRegistry != null) {
             log.info("Registering Tag Display and CTG Chart components.");
             this.componentRegistry.registerComponent(SimpleTagDisplayComponent.DESCRIPTOR);
@@ -48,6 +71,7 @@ public class SimpleTagDisplayGatewayHook extends AbstractGatewayModuleHook {
         }
     }
 
+    /** Mirror of startup(): un-register the components so they vanish from existing sessions. */
     @Override
     public void shutdown() {
         log.info("Shutting down Tag Display module and removing registered components.");
@@ -59,24 +83,32 @@ public class SimpleTagDisplayGatewayHook extends AbstractGatewayModuleHook {
         }
     }
 
+    /**
+     * Mount the REST-ish data routes the JS calls. Both groups attach themselves
+     * under the /data/simpletagdisplay/ prefix (or /main/data/simpletagdisplay/ in
+     * the gateway's Designer-launched session view).
+     */
     @Override
     public void mountRouteHandlers(RouteGroup routes) {
         TagReadRoutes.mountRoutes(routes);
         TrendRoutes.mountRoutes(routes);
     }
 
+    /** Folder name (under gateway/src/main/resources/) whose contents are served as static files. */
     @Override
     public Optional<String> getMountedResourceFolder() {
         return Optional.of("mounted");
     }
 
+    /** URL-alias prefix for the mounted folder above. Together they yield /res/simpletagdisplay/<file>. */
     @Override
     public Optional<String> getMountPathAlias() {
         return Optional.of(SimpleTagDisplayModule.URL_ALIAS);
     }
 
+    /** No license check — this module is open. */
     @Override
     public boolean isFreeModule() {
-        return true; // This is a free module
+        return true;
     }
 }

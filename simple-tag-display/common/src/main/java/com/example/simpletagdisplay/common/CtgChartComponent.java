@@ -5,10 +5,18 @@ import com.inductiveautomation.perspective.common.api.ComponentDescriptor;
 import com.inductiveautomation.perspective.common.api.ComponentDescriptorImpl;
 
 /**
- * Describes the CTG Chart component (session trend chart) for the Java registry.
+ * Java-side descriptor for the CtgChart (session trend chart) component.
+ *
+ * Pairs with the JS-side `CtgChartMeta` class in simpletagdisplay.js via COMPONENT_ID.
+ * Schema is loaded from common/src/main/resources/ctgchart.props.json.
+ *
+ * Note: this component reuses the SAME BROWSER_RESOURCES as SimpleTagDisplay
+ * because both components live in the same simpletagdisplay.js bundle.
+ * uPlot itself is loaded lazily by that JS — not declared here.
  */
 public class CtgChartComponent {
 
+    /** MUST match CtgChartMeta.getComponentType() in the JS. */
     public static final String COMPONENT_ID = "com.example.simpletagdisplay.CtgChart";
 
     public static final JsonSchema SCHEMA =

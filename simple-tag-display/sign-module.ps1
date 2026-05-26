@@ -1,26 +1,41 @@
-# Module Signing Script for Simple Tag Display (PowerShell)
-# This script helps sign the module using the module-signer tool
+# =============================================================================
+#  sign-module.ps1  —  invoke module-signer JAR with our dev keystore
+# =============================================================================
 #
-# Before running this script:
-# 1. Create a keystore with a code signing certificate
-# 2. Build the module-signer.jar tool
-# 3. Update the variables below with your actual values
+#  Normally run by build-and-sign.ps1 (which Push-Locations into $ModuleDir
+#  first so the relative paths below resolve). Can also be run standalone
+#  from the simple-tag-display\ directory if you only need to re-sign an
+#  already-built unsigned .modl.
+#
+#  Inputs:
+#      $MODULE_SIGNER_JAR   The signer tool, built from ..\module-signer
+#      $KEYSTORE            JKS containing the private key (dev only — DO NOT
+#                           reuse this credential for anything sensitive)
+#      $CERT_CHAIN          PKCS#7 (.p7b) cert chain for the self-signed cert
+#      $MODULE_IN           build\Tag-Display.unsigned.modl produced by Gradle
+#      $MODULE_OUT          build\Tag-Display.modl — what gets uploaded to gw
+#
+#  The chain file is optional: if missing, signer skips -chain= and produces
+#  a self-signed module that Ignition will accept only when "Allow Unsigned
+#  Modules" is enabled in Gateway settings.
+# =============================================================================
 
-# Use Java 17 when available (same as module build)
+# Use Java 17 when available (matches module build — Ignition rejects newer bytecode)
 $Java17 = "C:\Program Files\Java\jdk-17"
 if (Test-Path $Java17) {
     $env:JAVA_HOME = $Java17
     $env:Path = "$env:JAVA_HOME\bin;" + $env:Path
 }
 
+# All paths relative to simple-tag-display\ (caller is expected to cd here first).
 $MODULE_SIGNER_JAR = "..\module-signer\build\libs\module-signer-1.0.0-jar-with-dependencies.jar"
-$KEYSTORE = "simpletagdisplay.jks"
-$KEYSTORE_PWD = "simpletagdisplay123"
+$KEYSTORE = "simpletagdisplay.jks"                 # dev-only keystore — committed to repo
+$KEYSTORE_PWD = "simpletagdisplay123"               # dev-only — never reuse for anything real
 $ALIAS = "simpletagdisplay"
 $ALIAS_PWD = "simpletagdisplay123"
-$CERT_CHAIN = "simpletagdisplay.p7b"  # Certificate chain file for self-signed certificate
-$MODULE_IN = "build\Tag-Display.unsigned.modl"
-$MODULE_OUT = "build\Tag-Display.modl"
+$CERT_CHAIN = "simpletagdisplay.p7b"               # PKCS#7 chain for the self-signed cert
+$MODULE_IN = "build\Tag-Display.unsigned.modl"     # produced by `gradlew build`
+$MODULE_OUT = "build\Tag-Display.modl"             # signed output (what we deploy)
 
 # Check if module-signer.jar exists
 if (-not (Test-Path $MODULE_SIGNER_JAR)) {

@@ -16,23 +16,58 @@ import com.inductiveautomation.ignition.gateway.datasource.BasicStreamingDataset
 import com.inductiveautomation.ignition.gateway.model.GatewayContext;
 
 /**
- * Queries tag history via TagHistoryManager and returns JSON in the format
- * expected by the CTG Chart: { "series": [ { "tagPath": "...", "points": [ { "t": ms, "v": value }, ... ] } ] }.
+ * Wraps Ignition's TagHistoryManager and shapes the result into the JSON the
+ * CTG Chart frontend expects:
+ *
+ *   {
+ *     "success": true,
+ *     "series": [
+ *       { "tagPath": "[default]Foo", "points": [ { "t": 1700000000000, "v": 42.5 }, ... ] },
+ *       ...
+ *     ]
+ *   }
+ *
+ * Notes:
+ *   - Aggregated mode uses AggregationMode.LastValue across `pointCount` buckets.
+ *     End time is bucket-aligned so the window is stable between refresh ticks
+ *     (without alignment, a spike alternately appears/disappears as buckets shift).
+ *   - Raw mode uses returnSize=-1 (Ignition's "on-change" mode) and returns one
+ *     row per stored value change in the window. `pointCount` is ignored.
+ *   - NaN/Infinite values are filtered out — Ignition's Gson would emit a literal
+ *     `NaN` token, which is invalid JSON and crashes the JS parser.
+ *   - On any historian failure (TagHistoryManager null, query throws, empty rows),
+ *     we return success=true with empty per-tag points arrays so the chart degrades
+ *     gracefully instead of erroring.
  */
 public final class TagHistoryQuery {
 
     private TagHistoryQuery() {}
 
-    /**
-     * Query historian for the given tag paths and time range. Returns JSON object with "success" and "series".
-     * If Tag History is not available or query fails, returns success true with empty series.
-     */
+    /** Convenience overload kept for any callers that want defaults (no custom range, aggregated). */
     public static JsonObject query(GatewayContext gatewayContext, List<String> tagPathStrings,
             double rangeHours, int pointCount) {
+        return query(gatewayContext, tagPathStrings, rangeHours, pointCount, 0, 0, false);
+    }
+
+    /**
+     * Query historian for the given tag paths and time range.
+     *
+     * @param gatewayContext  Ignition gateway context (provides TagHistoryManager)
+     * @param tagPathStrings  fully-qualified tag paths e.g. "[default]Folder/Tag"
+     * @param rangeHours      window size in hours from "now" (used only when start/end ms are 0)
+     * @param pointCount      bucket count for aggregated queries (ignored when rawHistory)
+     * @param startTimeMs     absolute window start in epoch ms (overrides rangeHours when > 0)
+     * @param endTimeMs       absolute window end in epoch ms   (overrides rangeHours when > 0)
+     * @param rawHistory      true → on-change samples (returnSize=-1, no downsampling)
+     * @return                { success, series } JSON object (always success=true; empty series on failure)
+     */
+    public static JsonObject query(GatewayContext gatewayContext, List<String> tagPathStrings,
+            double rangeHours, int pointCount, long startTimeMs, long endTimeMs, boolean rawHistory) {
         JsonObject out = new JsonObject();
         out.addProperty("success", true);
         JsonArray seriesArray = new JsonArray();
 
+        // -- TagHistoryManager unavailable: degrade to empty per-tag points --
         com.inductiveautomation.ignition.gateway.historian.TagHistoryManager thm = gatewayContext.getTagHistoryManager();
         if (thm == null) {
             for (String p : tagPathStrings) {
@@ -63,21 +98,30 @@ public final class TagHistoryQuery {
         }
 
         long now = System.currentTimeMillis();
-        long rangeMs = (long) (rangeHours * 3600 * 1000);
-        int returnSize = pointCount <= 0 ? 0 : pointCount;
+        // Aggregated mode: ~pointCount samples with LastValue per interval.
+        // Raw / on-change: returnSize -1 (Ignition) — one row per stored change in range; pointCount unused.
+        int returnSize = rawHistory ? -1 : (pointCount <= 0 ? 0 : pointCount);
 
-        // Align the end time to a bucket boundary so the query window is stable
-        // between refresh ticks. Without this, shifting bucket edges cause a spike
-        // to alternately appear/disappear depending on whether it happens to be the
-        // "last value" in its bucket on any given tick.
-        long alignedNow = now;
-        if (returnSize > 0 && rangeMs > 0) {
-            long bucketMs = rangeMs / returnSize;
-            if (bucketMs > 0) alignedNow = (now / bucketMs) * bucketMs;
+        long resolvedEnd;
+        long resolvedStart;
+        if (startTimeMs > 0 && endTimeMs > 0) {
+            resolvedStart = startTimeMs;
+            resolvedEnd   = endTimeMs;
+        } else {
+            long rangeMs = (long) (rangeHours * 3600 * 1000);
+            resolvedEnd = now;
+            // Bucket-aligned end only for fixed-size aggregated queries (stable historian windows).
+            if (!rawHistory && returnSize > 0 && rangeMs > 0) {
+                long bucketMs = rangeMs / returnSize;
+                if (bucketMs > 0) {
+                    resolvedEnd = (now / bucketMs) * bucketMs;
+                }
+            }
+            resolvedStart = resolvedEnd - rangeMs;
         }
 
-        Date endDate = new Date(alignedNow);
-        Date startDate = new Date(alignedNow - rangeMs);
+        Date endDate   = new Date(resolvedEnd);
+        Date startDate = new Date(resolvedStart);
 
         @SuppressWarnings("unchecked")
         List<com.inductiveautomation.ignition.common.Path> pathList = (List) paths;
@@ -116,6 +160,16 @@ public final class TagHistoryQuery {
             return out;
         }
 
+        // Wide-format dataset layout from TagHistoryManager:
+        //   col 0  = timestamp (Date)
+        //   col 1+ = one column per tag path, in the same order we passed in
+        //
+        // Output transformation:
+        //   - timestamps → epoch ms (long) under "t"
+        //   - values → double under "v"
+        //   - NaN/Infinite values are SKIPPED (Gson would emit literal `NaN` which is
+        //     invalid JSON and would crash the JS parser — historian returns NaN for
+        //     points where the tag had bad quality).
         int timestampCol = 0;
         for (int c = 1; c < cols && c - 1 < validPathStrings.size(); c++) {
             JsonObject series = new JsonObject();
