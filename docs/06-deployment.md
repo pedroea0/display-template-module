@@ -80,12 +80,17 @@ Flags:
 
 In the gateway:
 
-1. **Config → Security → API Keys**.
+1. **Config → Platform → Security → API Keys**.
 2. Click **Create New API Key**.
 3. Set a name (e.g. `module-deploy`) and a scope. For the deploy script to work, the key needs permission to read/write modules and restart the gateway. The simplest scope is the built-in **Administrator** role.
-4. Click **Save**, then **copy the generated token immediately** — Ignition only shows it once.
+4. **Decide on secure connections** — see the gotcha below. If you deploy over plain HTTP, **uncheck** "Require secure connections for API Keys" when creating the key.
+5. Click **Save**, then **copy the generated key immediately** — Ignition shows the full key **only once**, at creation. If you lose it, you must create a new one.
 
-The token format is `<prefix>:<secret>`, e.g. `PE:abcdef...`. Drop it into your `deploy_config.local.json` (or pass `--api-token`).
+The token format is `<keyName>:<secret>`, e.g. `module-deploy:abcdef...`. It is sent verbatim in the `X-Ignition-API-Token` header (the deploy script already does this). Drop it into your `deploy_config.local.json` (or pass `--api-token`).
+
+> **HTTP 8.3 gotcha — the empty 401.** In Ignition 8.3, API Keys **require a secure (HTTPS) connection by default**: the **"Require secure connections for API Keys"** option is *enabled* when you create the key. If you then call the API over plain HTTP (e.g. `http://host:8088`), the gateway rejects the key with an **empty-bodied HTTP 401** — not a 403, and with no error message to explain why. Two fixes:
+> - **(a)** Create the API key with **"Require secure connections for API Keys" unchecked**, and keep deploying over `http://host:8088`; or
+> - **(b)** Enable SSL/TLS on the gateway and deploy over **https** (default secure port `8043`), e.g. `--gateway-url https://host:8043`.
 
 > **Tokens never go into committed code.** `deploy_config.local.json` is `.gitignore`d on purpose. For CI / production gateways, pass `--api-token` from an environment variable or a CI secret rather than checking in a local config file.
 

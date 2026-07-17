@@ -8,19 +8,46 @@ All frontend logic for both components lives in a single file: [simpletagdisplay
 
 The file is organized top-to-bottom in roughly this order:
 
-| Lines | Section |
-|---|---|
-| 1–53 | File header comment + global imports |
-| 56–119 | `SimpleTagDisplayMeta` (Perspective descriptor) |
-| 137–980 | `class SimpleTagDisplay extends Component` |
-| 983 | Registration: `ComponentRegistry.register(new SimpleTagDisplayMeta())` |
-| 995–1041 | Module-level helpers for the chart (`CTG_PALETTE`, `ctgRollingToHours`, etc.) |
-| 1043–1066 | `loadUPlot()` — lazy loader for uPlot CSS+JS |
-| 1070–1109 | `CtgChartMeta` (Perspective descriptor) |
-| 1142–2299 | `class CtgChart extends Component` |
-| 2301 | Registration: `ComponentRegistry.register(new CtgChartMeta())` |
+1. File header comment + global imports.
+2. **`SECTION 0 / TagReadPoller`** — the page-wide, shared, batched tag-value poller (a module-level IIFE). Every `SimpleTagDisplay` and the chart's `fetchCurrentValues` read through it.
+3. `SimpleTagDisplayMeta` — Perspective descriptor for the display.
+4. `class SimpleTagDisplay extends Component`.
+5. Registration: `ComponentRegistry.register(new SimpleTagDisplayMeta())`.
+6. Module-level helpers for the chart (`CTG_PALETTE`, `ctgRollingToHours`, etc.).
+7. `loadUPlot()` — lazy loader for uPlot CSS+JS.
+8. `CtgChartMeta` — Perspective descriptor for the chart.
+9. `class CtgChart extends Component`.
+10. Registration: `ComponentRegistry.register(new CtgChartMeta())`.
+
+(Exact line numbers drift as the file changes — search for the anchor names listed in the file's own header comment.)
 
 The split between "what's a class field vs. what's a free function" follows one rule: things specific to a component instance go on the class; things that are pure data transforms or stateless helpers go as module-level functions.
+
+---
+
+## SECTION 0: the shared tag poller (`TagReadPoller`)
+
+At the very top of the file, above both components, is a module-level IIFE that exposes a small `TagReadPoller` object. **There is exactly one of these per page.** It is the single most important thing to understand about how values get read now.
+
+Every `SimpleTagDisplay` subscribes the paths it cares about and gets a callback whenever a fresh value arrives:
+
+```js
+this._unsubValue = TagReadPoller.subscribe(path, this.handleTagValue);
+// ...later, on unmount / prop change:
+this._unsubValue();   // the subscribe() call returns its own unsubscribe fn
+```
+
+What the poller does each tick:
+
+- **Dedupes** paths across all subscribers (the same tag shown five times is read once).
+- Issues **one `/readTags` request per tick** carrying every distinct path, **chunked at 40 paths** per request.
+- **Guards against overlap** with a self-rescheduling `setTimeout` loop (not `setInterval`): the next tick is armed only after the current poll resolves, so a slow gateway throttles the cadence instead of piling up requests. The in-flight flag is reset reliably in a `finally`, and a request timeout aborts a stuck poll so it can never wedge the loop.
+- Reads its cadence fresh each tick from `window.__CTG_TAG_POLL_MS` (default **1000 ms**), so you can retune it live from the browser console.
+- Delivers the last known value to a new subscriber immediately, and does a debounced "poll soon" so a freshly-mounted component doesn't wait a whole interval for its first value.
+- Only caches values for paths that currently have subscribers (no unbounded growth).
+- On a transport/HTTP failure it delivers `{ isGood:false, error:'Disconnected' }` rather than hanging — so a display that never got a first value shows **"Disconnected"** instead of a permanent "Loading…".
+
+**Why:** the old design gave each `SimpleTagDisplay` its own `setInterval` hitting `/readTag` every 250 ms. Thirty displays = 120 requests/second, well past the browser's ~6-connection-per-origin limit, so requests queued, timed out, and components failed to render. Coalescing to one batched request per second fixed it. See the gateway side (`/readTags`) in [03-backend-java.md](03-backend-java.md).
 
 ---
 
@@ -65,8 +92,9 @@ this.state = {
 
 | Field | Purpose |
 |---|---|
-| `tagValue`, `isConnected` | Last `/readTag` result (or a sentinel string like `'Loading…'`, `'Bad Quality'`) |
-| `engUnit` | Set by `readEngUnit` when `showUnits` is on |
+| `tagValue`, `isConnected` | Last value from the poller (or a sentinel string like `'Loading…'`, `'Bad Quality'`, `'Disconnected'`) |
+| `engUnit` | Set by `handleEngUnit` when `showUnits` is on |
+| `engLow`, `engHigh` | The tag's Engineering Low/High limits, set by `handleEngLow` / `handleEngHigh` when `bounds.enabled` is on (drive bounds highlighting) |
 | `componentWidth/Height` | Observed by `ResizeObserver`, used for auto-font-sizing |
 | `showSetpointModal`, … | State for the setpoint write modal |
 | `contextMenuVisible`, … | State for the right-click menu |
@@ -75,24 +103,29 @@ Instance variables that **don't** drive re-renders go directly on `this` rather 
 
 | Instance var | Purpose |
 |---|---|
-| `pollInterval` | `setInterval` handle for `/readTag` (~250 ms) |
-| `engUnitInterval` | `setInterval` handle for `.EngUnit` reads (~5 s) |
+| `_unsubValue` | `TagReadPoller` unsubscribe fn for the tag's value |
+| `_unsubUnit` | Unsubscribe fn for the `.EngUnit` subscription (when `showUnits` is on) |
+| `_unsubLow` / `_unsubHigh` | Unsubscribe fns for `.EngLow` / `.EngHigh` (when `bounds.enabled` is on) |
+| `_isMounted` | Guard flag; async callbacks bail out if the component unmounted mid-flight |
 | `componentRef` | The root DOM node (set in `setupSizeTracking`) |
 | `resizeObserver` | The `ResizeObserver` instance |
 | `boundCloseContextMenu` | Document-level click listener that closes the menu |
+
+There are **no per-instance timers for tag reads** any more — value, unit, and bounds limits all come through the shared `TagReadPoller` (SECTION 0). Subscribing/unsubscribing is centralized in `subscribeTag()` / `unsubscribeTag()`.
 
 #### Lifecycle
 
 ```js
 componentDidMount() {
+    this._isMounted = true;
     this.boundCloseContextMenu = () => this.closeContextMenu();
-    this.startPolling();
-    setTimeout(() => this.setupSizeTracking(), 0);
+    this.subscribeTag();
+    this._sizeInitTimer = setTimeout(() => { this._sizeInitTimer = null; this.setupSizeTracking(); }, 0);
 }
 ```
 
-- `startPolling()` reads the tag once then starts a 250 ms interval. If `showUnits` is on, also starts a 5 s interval for `.EngUnit`.
-- `setupSizeTracking()` attaches a `ResizeObserver` (or falls back to a 100 ms polling interval if the browser lacks `ResizeObserver`). The `setTimeout(..., 0)` defers it one tick so `this.props.store.element` (Perspective's reference to the root DOM node) is populated.
+- `subscribeTag()` registers this tag's value with the shared `TagReadPoller` (plus `.EngUnit` when `showUnits` is on, and `.EngLow` / `.EngHigh` when `bounds.enabled` is on). No per-instance interval — the page-wide poller does the fetching.
+- `setupSizeTracking()` attaches a `ResizeObserver` (or falls back to a 100 ms polling interval if the browser lacks `ResizeObserver`). The `setTimeout(..., 0)` defers it one tick so `this.props.store.element` (Perspective's reference to the root DOM node) is populated. Its handle is stored in `_sizeInitTimer` and its callback checks `_isMounted`, so a fast unmount cancels it (otherwise it would attach an observer to a dead component).
 
 ```js
 componentDidUpdate(prevProps, prevState) {
@@ -102,23 +135,28 @@ componentDidUpdate(prevProps, prevState) {
     if (!this.state.contextMenuVisible && prevState.contextMenuVisible) {
         document.removeEventListener('click', this.boundCloseContextMenu);
     }
-    if (prevProps.props.tagPath !== this.props.props.tagPath) {
-        this.stopPolling();
-        this.startPolling();
+    // Re-subscribe when tagPath, showUnits, or bounds.enabled changes
+    // (bounds toggles the .EngLow/.EngHigh subscriptions).
+    if (prevProps.props.tagPath !== this.props.props.tagPath ||
+        prevProps.props.showUnits !== this.props.props.showUnits ||
+        prevBoundsEnabled !== curBoundsEnabled) {
+        this.subscribeTag();
     }
-    // ... showUnits handling, font-property handling
+    // ... font-property handling
 }
 ```
 
-Three things this method does on every re-render:
-1. Attach/detach a `document`-level click listener so clicking anywhere outside the context menu closes it. The `setTimeout(..., 0)` is so the *same* click that opened the menu isn't immediately re-caught here.
-2. Restart polling if `tagPath` changed.
-3. Restart EngUnit polling if `showUnits` or `tagPath` changed.
+Two things this method does on every re-render:
+1. Attach/detach a `document`-level click listener so clicking anywhere outside the context menu closes it. The `setTimeout(..., 0)` (tracked in `_ctxMenuTimer` and cancelled on unmount) is so the *same* click that opened the menu isn't immediately re-caught here.
+2. Re-subscribe to the poller if `tagPath`, `showUnits`, or `bounds.enabled` changed. `subscribeTag()` unsubscribes the previous set first, so it's safe to call repeatedly.
 
 ```js
 componentWillUnmount() {
+    this._isMounted = false;
+    if (this._sizeInitTimer) clearTimeout(this._sizeInitTimer);
+    if (this._ctxMenuTimer) clearTimeout(this._ctxMenuTimer);
     document.removeEventListener('click', this.boundCloseContextMenu);
-    this.stopPolling();
+    this.unsubscribeTag();
     if (this.resizeObserver && this.componentRef) {
         this.resizeObserver.unobserve(this.componentRef);
     }
@@ -126,28 +164,29 @@ componentWillUnmount() {
 }
 ```
 
-Mirror of mount — clean up everything we created. Forgetting any of this leaks (timers keep firing, observers stay attached, listeners pile up).
+Mirror of mount — clear `_isMounted`, cancel the tracked `setTimeout(0)` timers, unsubscribe from the poller, and tear down the observer. Forgetting any of this leaks (poller callbacks keep firing, observers stay attached, listeners pile up).
 
-#### Reading the tag: `readTagValue` and `readEngUnit`
+#### Reading the tag: poller callbacks
 
-The two `read*` methods have the same defensive shape:
+Values no longer come from a per-instance `fetch`. `subscribeTag()` registers callbacks with the shared `TagReadPoller`, and each callback just moves the delivered result into `state`:
 
 ```js
-const urlsToTry = [
-    `/data/simpletagdisplay/readTag?tagPath=${encodeURIComponent(tagPath)}`,
-    `/main/data/simpletagdisplay/readTag?tagPath=${encodeURIComponent(tagPath)}`
-];
-const tryFetch = (urlIndex) => {
-    if (urlIndex >= urlsToTry.length) { /* set error state */ return; }
-    fetch(urlsToTry[urlIndex])
-        .then(response => /* check status, content-type, parse */)
-        .then(data => /* success/error to state */)
-        .catch(error => /* fall through to next URL on 404 */);
+handleTagValue = (res) => {          // res = { value?, quality?, isGood } from /readTags
+    if (res && res.isGood) {
+        if (this.state.tagValue !== res.value || !this.state.isConnected)
+            this.setState({ tagValue: res.value, isConnected: true });
+    } else {
+        const msg = (res && res.error) || 'Bad Quality';   // 'Disconnected' on transport failure
+        if (this.state.isConnected || this.state.tagValue !== msg)
+            this.setState({ tagValue: msg, isConnected: false });
+    }
 };
-tryFetch(0);
+handleEngUnit = (res) => { /* '' unless good-quality, else String(res.value).trim() */ };
+handleEngLow  = (res) => { /* parseFloat; null unless finite → state.engLow  */ };
+handleEngHigh = (res) => { /* parseFloat; null unless finite → state.engHigh */ };
 ```
 
-The two URLs exist because Perspective routes data routes differently depending on whether the session was launched standalone (`/data/...`) or as a Designer-launched session inside the gateway (`/main/data/...`). We try one, fall through to the other on 404. Keep both unless you've verified your deployment hits one consistently.
+Each callback **only calls `setState` when the value actually changed**, so a static tag never triggers a re-render on a poll tick — important with dozens of these on one view. The dual-URL (`/data/...` vs `/main/data/...`) fallback that used to live in each component now lives **once**, inside the poller: it tries the best-guess base first and remembers whichever one answers. (`/main/...` is used when the session view is served under `/main/`, e.g. a Designer-launched session.)
 
 #### Setpoint modal
 
@@ -160,7 +199,7 @@ onSetpointInputChange = (e) => { /* update setpointInputValue */ };
 submitSetpoint = () => { /* validate, fetch /writeTag, close on success */ };
 ```
 
-`submitSetpoint` validates that the value is non-empty and parses as a finite number, then `fetch`es `/writeTag?...&value=...`. The dual-URL fallback applies here too. On success it closes the modal and calls `readTagValue()` immediately so the user sees the new value without waiting for the 250 ms tick.
+`submitSetpoint` validates that the value is non-empty and parses as a finite number, then `fetch`es `/writeTag?...&value=...`. The dual-URL fallback applies here too. On success it closes the modal and calls `TagReadPoller.pollSoon()` so the shared poller refreshes the displayed value promptly instead of waiting for the next poll tick.
 
 #### Right-click context menu
 
@@ -212,7 +251,7 @@ The render method is long but mechanical. Five things in order:
 2. **Value formatting** (lines 632–667). Three branches: boolean (with optional textOnTrue/textOnFalse), numeric (with `valuePrecision` and optional unit), or string.
 3. **Layout** (lines 681–744). `row` chooses flex direction; `verticalAlign` becomes `flex-start/center/flex-end`; `evenRow` forces 50/50 column widths.
 4. **Font auto-sizing** (lines 715–733). `calculateFontSize(styleObj, isValue)` returns the user's explicit `fontSize` if set, otherwise derives one from `min(componentWidth, componentHeight) * 0.12` (name) or `* 0.15` (value), clamped to ≥ 8 px.
-5. **Bounds highlighting** (lines 797–811). When `bounds.enabled` and the value is numeric, paints `backgroundColor: minColor` or `maxColor` if the value is outside the range.
+5. **Bounds highlighting.** When `bounds.enabled` and the value is numeric, paints `backgroundColor: minColor` when the value is below the tag's **Engineering Low Limit** or `maxColor` when it's above the tag's **Engineering High Limit**. Those limits are read from the tag itself (`.EngLow` / `.EngHigh`) through the shared poller and held in `state.engLow` / `state.engHigh` — there are **no manual `min`/`max` props any more**. `minInclusive` / `maxInclusive` still decide whether a value sitting exactly on a limit counts as in-range. A missing/bad limit (`null`) simply isn't applied.
 
 Then it assembles three optional React elements (tag-name div, tag-value div, setpoint modal, context menu) and returns them inside a root flex `<div>`. One subtle bit:
 
@@ -316,7 +355,7 @@ fetchJson(url) {
 }
 
 fetchCurrentValues(tagPaths) {
-    // for each path: GET /readTag → Map<path, number | null>
+    // batched GET /readTags (chunked at 40 paths) → Map<path, number | null>
 }
 
 fetchData() {
@@ -357,7 +396,7 @@ computeStats(series, liveValues) {
 
 uPlot's data format is one big rectangular array: `[timestamps, valuesSeries0, valuesSeries1, ...]`. All series share one timestamp axis, with `null` for missing points. `toUPlotData` does the conversion from our per-series shape.
 
-`_mergeLiveEndpoint` is a polish trick. Historian buckets are aligned to round time boundaries — between two refresh ticks the historian often returns the same points and the line looks frozen. Appending one synthetic point at `Date.now()` per tag (with the live value from `/readTag`) makes the line move every tick.
+`_mergeLiveEndpoint` is a polish trick. Historian buckets are aligned to round time boundaries — between two refresh ticks the historian often returns the same points and the line looks frozen. Appending one synthetic point at `Date.now()` per tag (with the live value from `/readTags`) makes the line move every tick. It's skipped in historical mode, where there is no live "now" to append.
 
 #### Lifecycle: load + refresh
 
@@ -544,6 +583,8 @@ componentWillUnmount() {
 ```
 
 Two-stage mount: `componentDidMount` kicks off `initialLoad`, which eventually sets `status: 'ready'`. The render then produces the chart container `<div>` with `ref={this.setChartEl}`, which fires `setChartEl(el)`. Then `componentDidUpdate` sees `prevState.status !== 'ready' && this.state.status === 'ready' && this.chartEl && !this.uplot` and calls `createChart`.
+
+**Async robustness.** Like `SimpleTagDisplay`, the chart sets an `_isMounted` flag in `componentDidMount` and clears it in `componentWillUnmount`; every `.then()` in `initialLoad` / `silentRefresh` / `fetchCurrentValues` bails out early when `_isMounted === false`, so a fetch that resolves after unmount can't call `setState` on a dead component. A transient failure during `initialLoad` schedules an auto-retry (guarded by `_isMounted`) rather than leaving the chart stuck on an error, and the `ResizeObserver` is re-attached after a chart reload so resizing keeps working once a pen is added/removed and the chart is rebuilt.
 
 #### Toolbar and modal
 

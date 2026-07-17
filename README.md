@@ -1,9 +1,11 @@
-# Tag Display & CTG Chart — an Ignition Perspective module
+# Display Template & Click To Graph Chart — an Ignition Perspective module
 
 A two-component Ignition 8.3 Perspective module written in-house for click-to-graph (CTG) trending:
 
-- **Tag Display** — a single-tag value label. Right-click a value → **Trend Tag** to send it to the chart. Optional setpoint write modal.
-- **CTG Chart** — a session-scoped trend chart (uPlot-based) that picks up whatever tags the user has trended. Includes a date-range modal, three interaction modes (X-Trace / Pan / Zoom), and a stats-table legend.
+- **Display Template** — a single-tag value label. Right-click a value → **Trend Tag** to send it to the chart. Optional setpoint write modal. Optional bounds highlighting driven by the tag's own Engineering Low/High limits.
+- **Click To Graph Chart** — a session-scoped trend chart (uPlot-based) that picks up whatever tags the user has trended. Includes a date-range modal, three interaction modes (X-Trace / Pan / Zoom), and a stats-table legend.
+
+> These are the palette display names. The underlying component IDs are unchanged — `com.example.simpletagdisplay.SimpleTagDisplay` and `com.example.simpletagdisplay.CtgChart` — so existing views keep working after an upgrade.
 
 The two components live in the same `.modl` and talk to each other via a small set of HTTP routes on the gateway plus a window-level browser event.
 
@@ -13,7 +15,7 @@ The two components live in the same `.modl` and talk to each other via a small s
 
 The signed `.modl` is published as a GitHub Release. Grab it from the **Releases** tab and install it via **Gateway → Config → Modules → Install or Upgrade a Module**.
 
-After install, drop **Tag Display** and **CTG Chart** onto any Perspective view from the **Display** palette category.
+After install, drop **Display Template** and **Click To Graph Chart** onto any Perspective view from the **Display** palette category.
 
 > **Heads up:** the signed `.modl` in releases is signed with a self-signed dev certificate. On a gateway that has *Allow Unsigned Modules* disabled, the upload will fail. Either enable that setting in the gateway config or re-sign the module with your own keystore (see [docs/07-signing.md](docs/07-signing.md)).
 
@@ -78,7 +80,9 @@ cd "Display Template Module"
 
 # 2. Configure deployment: copy the example to a local (git-ignored) config
 #    and fill in your own gateway URL + API token.
-#    (API token: Gateway → Config → Security → API Keys.)
+#    (API token: Gateway → Config → Security → API Keys. In Ignition 8.3, create the
+#     key with "Require secure connections for API Keys" UNCHECKED if you deploy over
+#     plain HTTP — otherwise the gateway rejects it with an empty 401. See docs/06-deployment.md.)
 copy simple-tag-display\deploy_config.example.json simple-tag-display\deploy_config.local.json
 # ...then edit deploy_config.local.json with your values
 

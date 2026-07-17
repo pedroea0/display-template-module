@@ -276,9 +276,9 @@ const str = JSON.stringify({ b: 2 });          // '{"b":2}'
 - **`Array.isArray(x)`** — proper way to check for arrays (because `typeof []` is `'object'`).
 - **Truthy/falsy** — `if (x)` is true when `x` is anything other than `0`, `''`, `null`, `undefined`, `NaN`, or `false`. We use this constantly to mean "if it has a value".
 
-## 13. A worked example from our code
+## 13. A worked example
 
-Putting it together — here's a real fragment from `SimpleTagDisplay.readTagValue()`, annotated:
+Putting it together — here's the classic `fetch` + `.then()` shape, annotated. (In the live code, `SimpleTagDisplay` no longer fetches its own value this way — it subscribes to the shared `TagReadPoller`, which does one batched `/readTags` fetch for the whole page. But the poller's own request uses exactly this pattern, so it's still the shape to learn.)
 
 ```js
 readTagValue() {
@@ -315,7 +315,7 @@ readTagValue() {
 }
 ```
 
-The actual code has fallback-URL logic on top of this, but the shape is the same.
+The actual poller has fallback-URL logic and batching on top of this, but the shape is the same.
 
 ---
 

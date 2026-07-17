@@ -30,11 +30,11 @@ simple-tag-display/
 │              src/main/resources/
 │              ├── simpletagdisplay.props.json       prop schema (display)
 │              ├── ctgchart.props.json               prop schema (chart)
-│              └── icon.svg                          palette icon
+│              └── icon.svg                          legacy asset (palette icons are now drawn in Java2D, see designer hook)
 │
 ├── gateway/   src/main/java/.../gateway/
 │              ├── SimpleTagDisplayGatewayHook.java  lifecycle + route mounting
-│              ├── routes/TagReadRoutes.java         /readTag, /writeTag, /isHistorized
+│              ├── routes/TagReadRoutes.java         /readTag, /readTags, /writeTag, /isHistorized
 │              ├── routes/TrendRoutes.java           /trendList + add/remove + /tagHistory
 │              ├── historian/TagHistoryQuery.java    wraps Ignition's TagHistoryManager
 │              └── session/TrendListStore.java       per-HTTP-session trend list (singleton)
@@ -44,7 +44,7 @@ simple-tag-display/
 │              └── css/uplot.min.css
 │
 └── designer/  src/main/java/.../designer/
-               └── SimpleTagDisplayDesignerHook.java  designer-scope registration + icon
+               └── SimpleTagDisplayDesignerHook.java  designer-scope registration + Java2D palette icons
 ```
 
 The Gradle build (`build.gradle.kts` at the module root) wires this together via the `io.ia.sdk.modl` plugin from Inductive Automation. We tell it which sub-projects belong to which scope:
@@ -69,7 +69,7 @@ The plugin then packages the three JARs (`common-1.0.0.jar`, `gateway-1.0.0.jar`
 4. `mountRouteHandlers(routes)` is called. The hook delegates to `TagReadRoutes.mountRoutes()` and `TrendRoutes.mountRoutes()`, which register the HTTP endpoints under `/data/simpletagdisplay/...`.
 5. The hook also tells Ignition (`getMountedResourceFolder()`, `getMountPathAlias()`) that the contents of `gateway/src/main/resources/mounted/` should be served as static files under `/res/simpletagdisplay/<path>`.
 
-For the **Designer**, the same dance happens with `SimpleTagDisplayDesignerHook`. It re-registers the components with the designer-side `DesignerComponentRegistry`, this time including an icon URL on the palette entry (because converting an SVG to a `BufferedImage` only makes sense in the Designer scope).
+For the **Designer**, the same dance happens with `SimpleTagDisplayDesignerHook`. It re-registers the components with the designer-side `DesignerComponentRegistry`, this time attaching a palette/tree icon via `ComponentBuilder.setIcon(...)`. The icons are `javax.swing.Icon` instances drawn directly in Java2D (no SVG parsing or resource loading), so they always render — see [03-backend-java.md](03-backend-java.md) for why an icon URL doesn't work in this SDK.
 
 ## What "registering a component" actually does
 
@@ -115,8 +115,8 @@ This is the core feature. Walk through it to understand how all the pieces inter
 │                                       │                                        │
 │                                       ├── fetch /trendList                    │
 │                                       ├── fetch /tagHistory  (parallel)       │
-│                                       └── fetch /readTag (parallel, one        │
-│                                            per tag, for the "Current" point)   │
+│                                       └── fetch /readTags (one batched         │
+│                                            request for all tags' "Current")    │
 │                                                                                 │
 │                                  createChart(uPlot)                            │
 │                                                                                 │
@@ -128,8 +128,9 @@ This is the core feature. Walk through it to understand how all the pieces inter
 │  Gateway (one JVM, one TrendListStore singleton)                              │
 │                                                                                │
 │   TagReadRoutes:                                                              │
-│     GET /readTag        ──► GatewayTagManager.readAsync(...)                  │
-│     GET /writeTag       ──► GatewayTagManager.writeAsync(...)                 │
+│     GET /readTag        ──► provider.readAsync(...)  (legacy single read)     │
+│     GET /readTags       ──► group by provider → one readAsync per provider    │
+│     GET /writeTag       ──► provider.writeAsync(...)                          │
 │     GET /isHistorized   ──► read <tagPath>.HistoryEnabled                     │
 │                                                                                │
 │   TrendRoutes:                                                                │
@@ -151,7 +152,7 @@ The two interesting things about that diagram:
 
 Once the chart is mounted, a `setInterval` ticks every `refreshRate` ms (default 5000) and calls `silentRefresh()`. That:
 - Re-queries the historian via `/tagHistory`.
-- Re-reads "now" values via `/readTag` in parallel.
+- Re-reads "now" values via `/readTags` in parallel (one batched request for all pens, chunked at 40 paths).
 - Either calls `setData` on the existing uPlot instance (same series count) or rebuilds the chart from scratch (series count changed because a pen was added/removed).
 
 The tricky bit is the **x-axis sliding window**. The visible window is driven by **explicit `setScale` calls** in the chart code, not by uPlot's auto-fit. That gives us one code path that covers four cases:
@@ -164,6 +165,12 @@ The tricky bit is the **x-axis sliding window**. The visible window is driven by
 | User clicks Reset Zoom | Goes back to the appropriate case above |
 
 Details on each case are in [docs/04-frontend-javascript.md](04-frontend-javascript.md).
+
+## Batched tag-value polling
+
+Every `SimpleTagDisplay` reads its value through **one page-wide shared poller** (`TagReadPoller`, SECTION 0 at the top of `simpletagdisplay.js`) rather than its own timer. Each display subscribes the paths it needs (its value, and optionally `.EngUnit` / `.EngLow` / `.EngHigh`); the poller dedupes across all subscribers and issues a single `/readTags` request per tick (default 1000 ms, override with `window.__CTG_TAG_POLL_MS`), chunked at 40 paths. On the gateway, `/readTags` groups the requested paths by provider and does one `provider.readAsync(list)` per provider.
+
+This replaced the old design where each display ran its own `setInterval` hitting `/readTag` every 250 ms — with 30+ displays on a view that saturated the browser's ~6-connection-per-origin limit and the gateway's HTTP worker pool, causing components to fail to load. The legacy single-read `/readTag` route is kept for back-compat.
 
 ## The "common" scope: descriptors and prop schemas
 

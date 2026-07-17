@@ -29,20 +29,21 @@ public class SimpleTagDisplayComponent {
 
     /**
      * Descriptor passed to ComponentRegistry.registerComponent(). It tells Perspective:
-     *   - where to put it in the component palette (Display category, "Tag Display" name)
+     *   - where to put it in the component palette (Display category, "Display Template" name)
      *   - which schema and module it belongs to
      *   - which browser JS resources to inject into sessions that use it
-     * Icon (palette thumbnail) is set later in the DesignerHook because Icon → BufferedImage
-     * conversion only makes sense in the designer scope.
+     * The palette / project-browser icon is set in the DesignerHook via setIcon() (a Java2D
+     * Icon), which only makes sense in the designer scope; the gateway-registered copy has no
+     * icon (there is no palette there).
      */
     public static final ComponentDescriptor DESCRIPTOR = ComponentDescriptorImpl.ComponentBuilder.newBuilder()
         .setPaletteCategory("Display")
         .setId(COMPONENT_ID)
         .setModuleId(SimpleTagDisplayModule.MODULE_ID)
         .setSchema(SCHEMA)
-        .setName("Tag Display")
-        .addPaletteEntry("", "Tag Display", "Displays tag names and values with automatic tag path parsing.", null, null)
-        .setDefaultMetaName("simpleTagDisplay")
+        .setName("Display Template")
+        .addPaletteEntry("", "Display Template", "Displays a tag's name and value; right-click the value to trend it on a Click To Graph Chart.", null, null)
+        .setDefaultMetaName("DisplayTemplate")
         .setResources(SimpleTagDisplayModule.BROWSER_RESOURCES)
         .build();
 }

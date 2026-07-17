@@ -141,7 +141,23 @@ this.componentRegistry.registerComponent(MyComponentComponent.DESCRIPTOR);
 
 And the matching `removeComponent(MyComponentComponent.COMPONENT_ID)` in `shutdown`.
 
-In [SimpleTagDisplayDesignerHook.init](../simple-tag-display/designer/src/main/java/com/example/simpletagdisplay/designer/SimpleTagDisplayDesignerHook.java), build a `descriptorWithIcons` for it with the same icon URL pattern, and register it with `registry.registerComponent`. Mirror the unregistration in `removeComponents`.
+In [SimpleTagDisplayDesignerHook.init](../simple-tag-display/designer/src/main/java/com/example/simpletagdisplay/designer/SimpleTagDisplayDesignerHook.java), rebuild the descriptor and attach an icon with `.setIcon(...)`, then register it with `registry.registerComponent`. Mirror the unregistration in `removeComponents`.
+
+#### Component icons: use `setIcon(...)` with a Java2D `Icon`
+
+This is the one non-obvious part. In this Perspective SDK, the palette (`PaletteItem`) and the project-browser tree render a component's icon from `ComponentDescriptor.getIcon()` — a `javax.swing.Icon`. **There is no URL-based palette icon**, and `addPaletteEntry(...)`'s first argument is the palette *variant id*, not an icon. So:
+
+```java
+public static final Icon MY_ICON = new MyComponentIcon(16);   // implements javax.swing.Icon
+
+ComponentDescriptor descriptor = ComponentDescriptorImpl.ComponentBuilder.newBuilder()
+    // ... category, id, module, schema, name ...
+    .setIcon(MY_ICON)
+    .addPaletteEntry("", "My Component", "...", null, null)   // "" = variant id, NOT an icon
+    .build();
+```
+
+The existing icons (`DisplayTemplateIcon`, `CtgChartIcon` in the designer hook) are private inner classes that paint themselves with `Graphics2D` from a 24-unit design scaled to the requested size. Drawing in Java2D means **no SVG parsing, no Batik, no resource loading** — nothing to fail to resolve, so the icon always renders. (Earlier attempts that passed a URL to `addPaletteEntry` or rendered an SVG `Icon` either did nothing or showed an error placeholder.) Also return your icon from `getResourceIcon(ResourcePath)` if you want it on the resource-tree node too.
 
 ### 4. JS implementation
 
@@ -279,10 +295,11 @@ These are listed in the **Pending** table at the bottom of [CLAUDE.md](../CLAUDE
 | High | Per-pen color picker (currently auto-cycles `CTG_PALETTE`) |
 | High | Click legend row to toggle that series visible/hidden (uPlot supports natively via `setSeries`) |
 | Medium | Multiple Y-axes with per-pen axis assignment (Power Chart parity) |
-| Low | Annotate mode (toolbar button is shown but disabled) |
 | Low | Export data (CSV / PNG) from the toolbar |
 
 If you pick one up, open an issue first to discuss the approach.
+
+> **Removed: Annotate mode.** The chart used to show a disabled "Annotate" toolbar button as a placeholder for PowerChart-style persistent annotations. It has been **removed**. In Ignition 8.3 the tag-history system was reorganized into a separate "historian" module and the old `HistoryManager` was dropped; SDK-level annotation storage is now provider-dependent and sparsely documented, which makes durable annotations impractical to implement cleanly. If you still want it, expect to design your own annotation store rather than leaning on the historian.
 
 ---
 

@@ -72,48 +72,36 @@
         },
         "bounds": {
             "type": "object",
-            "description": "Bounds configuration for value highlighting. When enabled, the value label background will be colored based on whether the value is below min (minColor) or above max (maxColor).",
+            "description": "Bounds highlighting for the value label. When enabled, the thresholds are read from the tag's own Engineering Low Limit (EngLow) and Engineering High Limit (EngHigh): the background turns minColor below the low limit and maxColor above the high limit.",
             "properties": {
                 "enabled": {
                     "type": "boolean",
-                    "description": "Enable bounds highlighting for the value label.",
+                    "description": "Enable bounds highlighting. Thresholds come from the tag's Engineering Low/High Limit (no manual min/max).",
                     "default": false
-                },
-                "min": {
-                    "type": "number",
-                    "description": "Minimum threshold value. Values below this (or equal if minInclusive is false) will use minColor background.",
-                    "default": 0
-                },
-                "max": {
-                    "type": "number",
-                    "description": "Maximum threshold value. Values above this (or equal if maxInclusive is false) will use maxColor background.",
-                    "default": 100
                 },
                 "minColor": {
                     "type": "string",
-                    "description": "Background color to apply when value is below (or equal to, if minInclusive is false) the minimum threshold.",
+                    "description": "Background color applied when the value is below (or equal to, if minInclusive is false) the tag's Engineering Low Limit.",
                     "default": "#FF0000"
                 },
                 "maxColor": {
                     "type": "string",
-                    "description": "Background color to apply when value is above (or equal to, if maxInclusive is false) the maximum threshold.",
+                    "description": "Background color applied when the value is above (or equal to, if maxInclusive is false) the tag's Engineering High Limit.",
                     "default": "#00FF00"
                 },
                 "minInclusive": {
                     "type": "boolean",
-                    "description": "If true, values equal to min are considered in range. If false, values equal to min trigger minColor.",
+                    "description": "If true, a value exactly at the Engineering Low Limit is considered in range. If false, a value at the low limit triggers minColor.",
                     "default": false
                 },
                 "maxInclusive": {
                     "type": "boolean",
-                    "description": "If true, values equal to max are considered in range. If false, values equal to max trigger maxColor.",
+                    "description": "If true, a value exactly at the Engineering High Limit is considered in range. If false, a value at the high limit triggers maxColor.",
                     "default": false
                 }
             },
             "default": {
                 "enabled": false,
-                "min": 0,
-                "max": 100,
                 "minColor": "#FF0000",
                 "maxColor": "#00FF00",
                 "minInclusive": false,

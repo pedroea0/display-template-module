@@ -40,13 +40,21 @@ public final class TrendListStore {
 
     private TrendListStore() {}
 
-    /** @return defensive copy of the session's list (or empty list if session unknown). */
+    /** @return defensive copy of the session's list (or empty list if session unknown).
+     *  The copy is taken under the same monitor add()/remove() use — copying an ArrayList
+     *  that another thread is concurrently mutating can otherwise yield a torn snapshot
+     *  (e.g. a trailing null) that would serialize into the /trendList response. */
     public List<String> getList(String sessionId) {
         if (sessionId == null || sessionId.isEmpty()) {
             return new ArrayList<>();
         }
         List<String> list = sessionToPaths.get(sessionId);
-        return list == null ? new ArrayList<>() : new ArrayList<>(list);
+        if (list == null) {
+            return new ArrayList<>();
+        }
+        synchronized (list) {
+            return new ArrayList<>(list);
+        }
     }
 
     /** Add `tagPath` (trimmed) to the session's list if not already present. No-op on bad input. */

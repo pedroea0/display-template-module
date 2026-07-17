@@ -9,11 +9,11 @@ All Java sources are under `simple-tag-display/<scope>/src/main/java/com/example
 | File | Scope | Purpose |
 |---|---|---|
 | [SimpleTagDisplayModule.java](../simple-tag-display/common/src/main/java/com/example/simpletagdisplay/common/SimpleTagDisplayModule.java) | common | Module-wide constants (ID, URL alias, browser-resource list) |
-| [SimpleTagDisplayComponent.java](../simple-tag-display/common/src/main/java/com/example/simpletagdisplay/common/SimpleTagDisplayComponent.java) | common | Java descriptor + prop schema for Tag Display |
-| [CtgChartComponent.java](../simple-tag-display/common/src/main/java/com/example/simpletagdisplay/common/CtgChartComponent.java) | common | Java descriptor + prop schema for CTG Chart |
+| [SimpleTagDisplayComponent.java](../simple-tag-display/common/src/main/java/com/example/simpletagdisplay/common/SimpleTagDisplayComponent.java) | common | Java descriptor + prop schema for the display (palette name "Display Template") |
+| [CtgChartComponent.java](../simple-tag-display/common/src/main/java/com/example/simpletagdisplay/common/CtgChartComponent.java) | common | Java descriptor + prop schema for the chart (palette name "Click To Graph Chart") |
 | [SimpleTagDisplayGatewayHook.java](../simple-tag-display/gateway/src/main/java/com/example/simpletagdisplay/gateway/SimpleTagDisplayGatewayHook.java) | gateway | Module lifecycle; registers components and mounts routes |
-| [SimpleTagDisplayDesignerHook.java](../simple-tag-display/designer/src/main/java/com/example/simpletagdisplay/designer/SimpleTagDisplayDesignerHook.java) | designer | Module lifecycle; registers components in the Designer's palette with icons |
-| [TagReadRoutes.java](../simple-tag-display/gateway/src/main/java/com/example/simpletagdisplay/gateway/routes/TagReadRoutes.java) | gateway | `/readTag`, `/writeTag`, `/isHistorized` HTTP routes |
+| [SimpleTagDisplayDesignerHook.java](../simple-tag-display/designer/src/main/java/com/example/simpletagdisplay/designer/SimpleTagDisplayDesignerHook.java) | designer | Module lifecycle; registers components in the Designer's palette with Java2D icons |
+| [TagReadRoutes.java](../simple-tag-display/gateway/src/main/java/com/example/simpletagdisplay/gateway/routes/TagReadRoutes.java) | gateway | `/readTag`, `/readTags` (batch), `/writeTag`, `/isHistorized` HTTP routes |
 | [TrendRoutes.java](../simple-tag-display/gateway/src/main/java/com/example/simpletagdisplay/gateway/routes/TrendRoutes.java) | gateway | `/trendList`, `/addToTrendList`, `/removeFromTrendList`, `/tagHistory` |
 | [TrendListStore.java](../simple-tag-display/gateway/src/main/java/com/example/simpletagdisplay/gateway/session/TrendListStore.java) | gateway | In-memory, per-HTTP-session list of trended tag paths (singleton) |
 | [TagHistoryQuery.java](../simple-tag-display/gateway/src/main/java/com/example/simpletagdisplay/gateway/historian/TagHistoryQuery.java) | gateway | Wraps Ignition's `TagHistoryManager`, shapes the result into JSON |
@@ -55,18 +55,18 @@ public static final ComponentDescriptor DESCRIPTOR = ComponentDescriptorImpl.Com
     .setId(COMPONENT_ID)
     .setModuleId(SimpleTagDisplayModule.MODULE_ID)
     .setSchema(SCHEMA)
-    .setName("Tag Display")
-    .addPaletteEntry("", "Tag Display", "Displays tag names ...", null, null)
-    .setDefaultMetaName("simpleTagDisplay")
+    .setName("Display Template")
+    .addPaletteEntry("", "Display Template", "Displays a tag's name and value ...", null, null)
+    .setDefaultMetaName("DisplayTemplate")
     .setResources(SimpleTagDisplayModule.BROWSER_RESOURCES)
     .build();
 ```
 
-- **`COMPONENT_ID`** must exactly match the string returned by `SimpleTagDisplayMeta.getComponentType()` in the JS. The two halves of a Perspective component are joined by this string.
+- **`COMPONENT_ID`** must exactly match the string returned by `SimpleTagDisplayMeta.getComponentType()` in the JS. The two halves of a Perspective component are joined by this string. **The IDs are unchanged** (`...SimpleTagDisplay` / `...CtgChart`) — only the human-facing names changed: "Tag Display" → **Display Template** (default drop name `DisplayTemplate`) and "CTG Chart" → **Click To Graph Chart** (default drop name `CTG-Chart`).
 - **`SCHEMA`** is parsed from a JSON Schema file at module load time. The Designer uses it to build the property editor; the JS side reads the live values via `getPropsReducer`. The two must agree.
 - **`DESCRIPTOR`** packages everything Perspective needs: palette category and entry, schema, default node name (what shows up in the project tree when you drop the component), and the list of browser resources to inject.
 
-The palette entry's icon URL is left empty (`""`) here. The Designer hook builds a *second* copy of the descriptor with the icon URL filled in — see below.
+The gateway descriptor sets **no icon** (there is no palette on the gateway). The first `addPaletteEntry` argument is the palette *variant id* (`""`), **not** an icon URL. The Designer hook builds a *second* copy of each descriptor and attaches a Java2D icon via `setIcon(...)` — see below.
 
 ## SimpleTagDisplayGatewayHook.java (gateway)
 
@@ -124,20 +124,23 @@ Tells Ignition this module needs no license. Together with `freeModule.set(true)
 
 Mirror of the gateway hook but for the Designer's separate `DesignerComponentRegistry`. Two interesting differences:
 
-1. **Icons.** The base descriptors in `common/` set the palette-entry icon URL to `null`. The designer hook rebuilds each descriptor with the icon URL filled in:
+1. **Icons via `setIcon(...)`, drawn in Java2D.** The Perspective palette (`PaletteItem`) and the project-browser component tree render a component's icon from `ComponentDescriptor.getIcon()` — a `javax.swing.Icon` set with `ComponentBuilder.setIcon(...)`. **There is no URL-based palette icon in this SDK.** (The first `addPaletteEntry` argument is the palette *variant id*, not an icon; passing a URL there does nothing.) So the designer hook rebuilds each descriptor with an icon attached:
 
    ```java
-   String iconUrl = String.format("/res/%s/icon.svg", SimpleTagDisplayModule.URL_ALIAS);
-   ComponentDescriptor descriptorWithIcons = ComponentDescriptorImpl.ComponentBuilder.newBuilder()
+   public static final Icon DISPLAY_ICON = new DisplayTemplateIcon(16);
+   public static final Icon CHART_ICON   = new CtgChartIcon(16);
+
+   ComponentDescriptor displayDescriptor = ComponentDescriptorImpl.ComponentBuilder.newBuilder()
        // ... same as the common one, except:
-       .addPaletteEntry(iconUrl, "Tag Display", "...", null, null)
+       .setIcon(DISPLAY_ICON)
+       .addPaletteEntry("", "Display Template", "...", null, null)
        .build();
-   registry.registerComponent(descriptorWithIcons);
+   registry.registerComponent(displayDescriptor);
    ```
 
-   The icon URL is the same `/res/simpletagdisplay/icon.svg` that the gateway serves from `gateway/src/main/resources/mounted/icon.svg`.
+   `DisplayTemplateIcon` (a blue value "card") and `CtgChartIcon` (axes + a trend line with two highlighted points) are private inner classes that implement `Icon` and paint themselves with `Graphics2D` — no SVG, no Batik, no resource loading, so nothing can fail to resolve. This is the correct pattern for adding a component icon in this SDK. (Earlier attempts — a URL in `addPaletteEntry`, then an SVG-rendered `Icon` — either did nothing or surfaced an error placeholder.)
 
-2. **Project browser icon.** `getResourceIcon(ResourcePath)` returns an `Icon` (Swing) that the Designer uses next to nodes in the project resource tree. It's built once at class load via `InteractiveSvgIcon.createIconAll(...)` from `common/src/main/resources/icon.svg`. SVG-to-`BufferedImage` conversion can only happen in the Designer scope, which is why the field is `public static final Icon COMPONENT_ICON` here instead of in `common/`.
+2. **Project browser icon.** `getResourceIcon(ResourcePath)` returns the same `DISPLAY_ICON` for nodes of this module's resource type, so the resource tree shows the Java2D icon too.
 
 ## TagReadRoutes.java (gateway routes)
 
@@ -145,12 +148,9 @@ Three GET endpoints. All three live under `/data/simpletagdisplay/` (the prefix 
 
 ### `/readTag?tagPath=...`
 
-Reads one tag value. Used by:
-- `SimpleTagDisplay` polling every 250 ms.
-- `SimpleTagDisplay` reading `<tagPath>.EngUnit` every 5 s when `showUnits` is on.
-- `CtgChart` reading "now" values in parallel for the legend's *Current* column.
+Reads one tag value. This is now the **legacy single-read** route, kept for back-compat — the components read through the batched `/readTags` route below instead. Response shape and path parsing are unchanged.
 
-The path-parsing dance is the same across all three routes in this file:
+The path-parsing dance is the same across the read/write routes in this file:
 
 ```java
 // 1. Parse the full path; getSource() yields the provider name (e.g. "default").
@@ -187,6 +187,25 @@ Response shape:
 ```json
 { "success": true, "value": "42.5", "quality": "Good", "isGood": true }
 ```
+
+### `/readTags?tagPaths=csv` (batch)
+
+The route every value read now goes through. It takes a comma-joined, percent-encoded list of paths and returns them all in one response:
+
+```json
+{ "success": true, "values": { "[default]Foo": { "value": "42.5", "quality": "Good", "isGood": true },
+                               "[default]Bar": { "isGood": false } } }
+```
+
+Used by:
+- The page-wide `TagReadPoller` shared by every `SimpleTagDisplay` (tag value, plus `.EngUnit` / `.EngLow` / `.EngHigh` when needed).
+- `CtgChart.fetchCurrentValues` for the legend's *Current* column (chunked at 40 paths).
+
+Why it exists: a view with 30+ displays used to fire 30+ separate `/readTag` requests per poll tick, saturating the browser's ~6-connection-per-origin limit and the gateway thread pool. `/readTags` collapses that into one request. Internally it:
+
+1. Parses each path into `(providerName, provider-relative TagPath)` — the same logic as `/readTag`, factored into a `parseProviderAndPath` helper — while **preserving the original request string** as the response key.
+2. **Groups indices by provider**, then does **one `provider.readAsync(list)` per provider**. All providers are dispatched first (phase 1) so their reads run concurrently, then their futures are collected against a **single shared 30-second deadline** (phase 2) — so a request spanning several providers waits ~one timeout total, not 30 s per provider.
+3. Any path that fails to parse, has an unknown provider, or times out is emitted as `{ "isGood": false }`. A good-quality null value serializes as the string `"null"` — identical to `/readTag`, so the two routes behave the same and the client never sees an `undefined` value.
 
 ### `/writeTag?tagPath=...&value=...`
 
@@ -287,7 +306,7 @@ public void remove(String sessionId, String tagPath);
 Two concurrency notes:
 
 1. **`ConcurrentHashMap`** is safe for concurrent `get`/`put` from multiple HTTP-handler threads.
-2. **Per-list mutations are `synchronized(list)`** — without that, two simultaneous `add` calls for the same session could both pass the `contains` check and insert a duplicate. `getList` returns a *copy* so callers can iterate without holding the lock.
+2. **Per-list mutations are `synchronized(list)`** — without that, two simultaneous `add` calls for the same session could both pass the `contains` check and insert a duplicate. `getList` takes its defensive copy **inside the same `synchronized(list)` monitor** that `add`/`remove` use — copying an `ArrayList` while another thread mutates it can otherwise yield a torn snapshot (e.g. a trailing `null`) that would serialize into the `/trendList` response.
 
 There's a `clear(sessionId)` method we don't currently call. The trend list is intended to be tab-scoped and short-lived; if the session expires Ignition reclaims the entry naturally when the next access for that ID fails to find one. If we ever add a *cleanup-on-disconnect* hook, that's where it'd go.
 

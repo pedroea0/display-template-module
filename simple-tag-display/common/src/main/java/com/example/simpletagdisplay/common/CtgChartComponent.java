@@ -27,9 +27,9 @@ public class CtgChartComponent {
         .setId(COMPONENT_ID)
         .setModuleId(SimpleTagDisplayModule.MODULE_ID)
         .setSchema(SCHEMA)
-        .setName("CTG Chart")
-        .addPaletteEntry("", "CTG Chart", "Session trend chart for tags added via Tag Display 'Trend Tag'.", null, null)
-        .setDefaultMetaName("ctgChart")
+        .setName("Click To Graph Chart")
+        .addPaletteEntry("", "Click To Graph Chart", "Session trend chart for tags added via a Display Template's 'Trend Tag'.", null, null)
+        .setDefaultMetaName("CTG-Chart")
         .setResources(SimpleTagDisplayModule.BROWSER_RESOURCES)
         .build();
 }
