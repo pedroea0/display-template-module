@@ -36,7 +36,7 @@
         },
         "evenRow": {
             "type": "boolean",
-            "description": "When true and row is true, evenly distributes tag name and value across the component (each takes 50% width). Only applies when row is true.",
+            "description": "When true and row is true, evenly distributes tag name and value across the component (each takes 50% width). Only applies when row is true. Also fun to sign Even Flow (Pearl Jam) as Eveeeenn Roooowww when toggling",
             "default": false
         },
         "verticalAlign": {
