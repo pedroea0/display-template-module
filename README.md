@@ -25,7 +25,6 @@ After install, drop **Display Template** and **Click To Graph Chart** onto any P
 ```
 Display Template Module/
 ├── README.md                       ← this file
-├── CLAUDE.md                       ← context file used by AI coding assistants
 ├── docs/                           ← all documentation lives here
 │   ├── 01-architecture.md            How the module is structured (scopes, data flow)
 │   ├── 02-javascript-primer.md       JS concepts you'll need to read the frontend
