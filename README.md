@@ -5,7 +5,6 @@ A two-component Ignition 8.3 Perspective module written in-house for click-to-gr
 - **Display Template** — a single-tag value label. Right-click a value → **Trend Tag** to send it to the chart. Optional setpoint write modal. Optional bounds highlighting driven by the tag's own Engineering Low/High limits.
 - **Click To Graph Chart** — a session-scoped trend chart (uPlot-based) that picks up whatever tags the user has trended. Includes a date-range modal, three interaction modes (X-Trace / Pan / Zoom), and a stats-table legend.
 
-> These are the palette display names. The underlying component IDs are unchanged — `com.example.simpletagdisplay.SimpleTagDisplay` and `com.example.simpletagdisplay.CtgChart` — so existing views keep working after an upgrade.
 
 The two components live in the same `.modl` and talk to each other via a small set of HTTP routes on the gateway plus a window-level browser event.
 
