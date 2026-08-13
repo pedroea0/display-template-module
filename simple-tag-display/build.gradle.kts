@@ -10,7 +10,7 @@ plugins {
 val sdk_version by extra("8.3.1")
 
 allprojects {
-    version = "1.1.1"
+    version = "1.1.5"
 }
 
 ignitionModule {

@@ -145,21 +145,6 @@ public final class TagHistoryQuery {
             return out;
         }
 
-        // Wide format: first column is timestamp, then one column per tag (same order as paths)
-        Dataset ds = writer;
-        int rows = ds.getRowCount();
-        int cols = ds.getColumnCount();
-        if (cols < 2 || rows == 0) {
-            for (String p : validPathStrings) {
-                JsonObject series = new JsonObject();
-                series.addProperty("tagPath", p);
-                series.add("points", new JsonArray());
-                seriesArray.add(series);
-            }
-            out.add("series", seriesArray);
-            return out;
-        }
-
         // Wide-format dataset layout from TagHistoryManager:
         //   col 0  = timestamp (Date)
         //   col 1+ = one column per tag path, in the same order we passed in
@@ -169,29 +154,137 @@ public final class TagHistoryQuery {
         //   - values → double under "v"
         //   - NaN/Infinite values are SKIPPED (Gson would emit literal `NaN` which is
         //     invalid JSON and would crash the JS parser — historian returns NaN for
-        //     points where the tag had bad quality).
+        //     points where the tag had bad quality, and for empty aggregation buckets).
+        int tagCount = validPathStrings.size();
+        List<JsonArray> pointsPerTag = new ArrayList<>(tagCount);
+        long[] firstTs = new long[tagCount];
+        for (int i = 0; i < tagCount; i++) {
+            pointsPerTag.add(new JsonArray());
+            firstTs[i] = Long.MAX_VALUE;
+        }
+
+        Dataset ds = writer;
+        int rows = ds.getRowCount();
+        int cols = ds.getColumnCount();
         int timestampCol = 0;
-        for (int c = 1; c < cols && c - 1 < validPathStrings.size(); c++) {
-            JsonObject series = new JsonObject();
-            series.addProperty("tagPath", validPathStrings.get(c - 1));
-            JsonArray points = new JsonArray();
-            for (int r = 0; r < rows; r++) {
-                Object tsObj = ds.getValueAt(r, timestampCol);
-                Object valObj = ds.getValueAt(r, c);
-                if (tsObj == null) continue;
-                long t = tsObj instanceof Date ? ((Date) tsObj).getTime()
-                        : (tsObj instanceof Number ? ((Number) tsObj).longValue() : 0);
-                double v = valObj instanceof Number ? ((Number) valObj).doubleValue() : Double.NaN;
-                if (Double.isNaN(v) || Double.isInfinite(v)) continue;
-                JsonObject pt = new JsonObject();
-                pt.addProperty("t", t);
-                pt.addProperty("v", v);
-                points.add(pt);
+        if (cols >= 2 && rows > 0) {
+            for (int c = 1; c < cols && c - 1 < tagCount; c++) {
+                JsonArray points = pointsPerTag.get(c - 1);
+                for (int r = 0; r < rows; r++) {
+                    Object tsObj = ds.getValueAt(r, timestampCol);
+                    Object valObj = ds.getValueAt(r, c);
+                    if (tsObj == null) continue;
+                    long t = tsObj instanceof Date ? ((Date) tsObj).getTime()
+                            : (tsObj instanceof Number ? ((Number) tsObj).longValue() : 0);
+                    double v = valObj instanceof Number ? ((Number) valObj).doubleValue() : Double.NaN;
+                    if (Double.isNaN(v) || Double.isInfinite(v)) continue;
+                    JsonObject pt = new JsonObject();
+                    pt.addProperty("t", t);
+                    pt.addProperty("v", v);
+                    points.add(pt);
+                    if (t < firstTs[c - 1]) firstTs[c - 1] = t;
+                }
             }
-            series.add("points", points);
+        }
+
+        // -- CARRY-IN ANCHOR ---------------------------------------------------------
+        // A window narrower than the tag's logging interval contains no stored sample,
+        // so every aggregation bucket comes back NaN, every point is skipped above, and
+        // the series is empty. The chart then has nothing to draw a line between — the
+        // user sees only the live "now" point the frontend appends. That is what made
+        // the line "disappear" both when zoomed in and on short realtime ranges like
+        // "Last 30 seconds".
+        //
+        // Fix: for any tag whose data does not already start at the window start, look
+        // up its last known value BEFORE the window and emit it at resolvedStart. That
+        // is standard last-known-value carry-forward — the same thing Power Chart does
+        // — and it guarantees a left-hand anchor to draw from at any window width.
+        //
+        // Cost control: this runs ONE extra historian query, and only when at least one
+        // tag actually needs an anchor. Dense tags whose data already covers the window
+        // skip it entirely.
+        // ----------------------------------------------------------------------------
+        boolean needAnchor = false;
+        for (int i = 0; i < tagCount; i++) {
+            if (firstTs[i] > resolvedStart) { needAnchor = true; break; }
+        }
+        if (needAnchor) {
+            double[] anchors = lastValuesBefore(thm, pathList, resolvedStart, tagCount);
+            for (int i = 0; i < tagCount; i++) {
+                if (firstTs[i] <= resolvedStart) continue;             // already covered
+                double av = anchors[i];
+                if (Double.isNaN(av) || Double.isInfinite(av)) continue;
+                JsonObject pt = new JsonObject();
+                pt.addProperty("t", resolvedStart);
+                pt.addProperty("v", av);
+                // prepend — the frontend builds its timestamp spine by sorting, but
+                // keeping the array ordered costs nothing and keeps the JSON readable
+                JsonArray existing = pointsPerTag.get(i);
+                JsonArray merged = new JsonArray();
+                merged.add(pt);
+                merged.addAll(existing);
+                pointsPerTag.set(i, merged);
+            }
+        }
+
+        for (int i = 0; i < tagCount; i++) {
+            JsonObject series = new JsonObject();
+            series.addProperty("tagPath", validPathStrings.get(i));
+            series.add("points", pointsPerTag.get(i));
             seriesArray.add(series);
         }
         out.add("series", seriesArray);
         return out;
+    }
+
+    /** How far back to hunt for a carry-in value. Bounded so a tag that has never been
+     *  logged can't turn into an unbounded historian scan. */
+    private static final long ANCHOR_LOOKBACK_MS = 24L * 60 * 60 * 1000;
+
+    /**
+     * Last stored value per tag strictly before {@code beforeMs}, as a parallel array
+     * aligned to {@code pathList}. Entries are NaN where no prior value exists.
+     *
+     * Uses returnSize=1 + LastValue over [beforeMs - ANCHOR_LOOKBACK_MS, beforeMs], which
+     * asks the historian for exactly one aggregated row: the most recent value in that
+     * lookback. Any failure degrades to all-NaN, which simply means no anchor is added.
+     */
+    private static double[] lastValuesBefore(
+            com.inductiveautomation.ignition.gateway.historian.TagHistoryManager thm,
+            List<com.inductiveautomation.ignition.common.Path> pathList,
+            long beforeMs, int tagCount) {
+
+        double[] result = new double[tagCount];
+        for (int i = 0; i < tagCount; i++) result[i] = Double.NaN;
+
+        long lookbackStart = beforeMs - ANCHOR_LOOKBACK_MS;
+        if (lookbackStart < 0) lookbackStart = 0;
+        if (beforeMs <= lookbackStart) return result;
+
+        try {
+            BasicTagHistoryQueryParams params = new BasicTagHistoryQueryParams(
+                    pathList, new Date(lookbackStart), new Date(beforeMs), 1,
+                    AggregationMode.LastValue, ReturnFormat.Wide, null, null);
+            BasicStreamingDataset writer = new BasicStreamingDataset();
+            thm.queryHistory(params, writer);
+            writer.finish();
+
+            Dataset ds = writer;
+            int rows = ds.getRowCount();
+            int cols = ds.getColumnCount();
+            if (cols < 2 || rows == 0) return result;
+            // Walk every row and keep the last finite value per column — returnSize=1
+            // normally yields a single row, but don't depend on that.
+            for (int c = 1; c < cols && c - 1 < tagCount; c++) {
+                for (int r = 0; r < rows; r++) {
+                    Object valObj = ds.getValueAt(r, c);
+                    double v = valObj instanceof Number ? ((Number) valObj).doubleValue() : Double.NaN;
+                    if (!Double.isNaN(v) && !Double.isInfinite(v)) result[c - 1] = v;
+                }
+            }
+        } catch (Exception e) {
+            // no anchor available — chart degrades to what it did before
+        }
+        return result;
     }
 }

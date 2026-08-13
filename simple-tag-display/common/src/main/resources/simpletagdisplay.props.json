@@ -129,6 +129,7 @@
         },
         "style": {
             "$ref": "urn:ignition-schema:schemas/style-properties.schema.json",
+            "description": "Styles for the component as a whole. These also cascade down to the tag name and tag value labels, so setting a color, font or style class here affects both. Anything set in tagNameStyle or tagValueStyle overrides it for that label. Left alone, the component is transparent and inherits the active Perspective theme's background and text color.",
             "default": {
                 "classes": ""
             }

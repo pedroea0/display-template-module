@@ -56,6 +56,94 @@ const { Component, ComponentRegistry } = window.PerspectiveClient;
 
 
 /* ============================================================================
+ * SECTION 0a / Style helpers (SimpleTagDisplay look & feel)
+ * ----------------------------------------------------------------------------
+ * WHY A STYLESHEET INSTEAD OF INLINE STYLES
+ *
+ * Every visual default used to be written as an inline style on the element.
+ * Inline styles beat *every* CSS rule, so a style class set on the `style`,
+ * `tagNameStyle` or `tagValueStyle` props could never override them — the class
+ * was applied, it just lost. Worse, a hardcoded `backgroundColor: '#f9f9f9'`
+ * was merged AFTER the emit() styles, so even `style.backgroundColor` lost.
+ *
+ * The defaults now live in a stylesheet wrapped in `:where(...)`, which has
+ * ZERO specificity. That gives the precedence the props imply:
+ *
+ *     inline style prop  >  any style class  >  these defaults
+ *
+ * regardless of which stylesheet the browser loaded first.
+ *
+ * THEMING
+ * The root is `background-color: transparent` + `color: inherit` rather than a
+ * fixed white/black. That makes the component adopt whatever the active
+ * Perspective theme paints behind it — light theme gives a white surface with
+ * dark text, dark theme gives a dark surface with light text — with no theme
+ * name or CSS-variable name hardcoded here. Setting `style.backgroundColor` /
+ * `style.color` (or a class) overrides it, exactly as the props imply.
+ *
+ * The name/value font sizes come through the `--std-name-size` /
+ * `--std-value-size` custom properties, which render() sets on the root. Going
+ * through a custom property (rather than an inline `font-size` on each label)
+ * is what lets a style class override the auto-calculated size.
+ * ============================================================================ */
+
+const STD_STYLE_ELEMENT_ID = 'ctg-simple-tag-display-styles';
+
+function ensureDisplayStyles() {
+    if (document.getElementById(STD_STYLE_ELEMENT_ID)) return;
+    const el = document.createElement('style');
+    el.id = STD_STYLE_ELEMENT_ID;
+    el.textContent = [
+        ':where(.simple-tag-display-component){',
+            'background-color:transparent;',      /* follow the theme, not a fixed #f9f9f9 */
+            'color:inherit;',                     /* ditto for text color                  */
+            'font-family:Arial, sans-serif;',
+            'padding:10px;',
+            'border-radius:4px;',
+        '}',
+        /* The three properties these rules declare on the label would otherwise block the
+           root `style` prop from reaching it — a declared value beats an inherited one.
+           Reading them from custom properties keeps the root in control while leaving the
+           declaration itself at zero specificity, so a style class still wins over both.
+           `color` and `font-family` are absent on purpose: nothing declares them on the
+           label, so they simply inherit from the root. */
+        ':where(.std-tag-name){',
+            'font-weight:var(--std-font-weight, bold);',
+            'text-align:var(--std-text-align, center);',
+            'font-size:var(--std-name-size, 12px);',
+            'transition:font-size 0.2s ease;',
+        '}',
+        ':where(.std-tag-value){',
+            'font-weight:var(--std-font-weight, normal);',
+            'text-align:var(--std-text-align, center);',
+            'font-size:var(--std-value-size, 14px);',
+            'transition:font-size 0.2s ease;',
+        '}'
+    ].join('');
+    document.head.appendChild(el);
+}
+
+/**
+ * Split a Perspective style-props object into its CSS half.
+ * Returns every entry except `classes`, with kebab-case keys converted to the
+ * camelCase React expects ('font-size' → 'fontSize'). Custom properties
+ * (`--foo`) are passed through untouched — React only accepts those verbatim.
+ */
+function cssPropsOf(styleObj) {
+    const out = {};
+    if (!styleObj) return out;
+    Object.keys(styleObj).forEach(key => {
+        if (key === 'classes') return;
+        const cssKey = key.startsWith('--')
+            ? key
+            : key.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
+        out[cssKey] = styleObj[key];
+    });
+    return out;
+}
+
+
+/* ============================================================================
  * SECTION 0 / TagReadPoller — shared, batched tag-value poller
  * ----------------------------------------------------------------------------
  * ONE poller for the whole page. Every SimpleTagDisplay (and any other caller)
@@ -313,7 +401,11 @@ class SimpleTagDisplayMeta {
             }),
             setpoint: tree.readBoolean("setpoint", false),                   // when true, clicking the value opens a write modal
             tagNameStyle: tree.read("tagNameStyle", { classes: "" }),
-            tagValueStyle: tree.read("tagValueStyle", { classes: "" })
+            tagValueStyle: tree.read("tagValueStyle", { classes: "" }),
+            // The root `style` prop. emit() already applies this to the root element, but we
+            // read it here too so render() can cascade it down to the name/value labels as
+            // their default (see "STYLE CASCADE" in render()).
+            style: tree.read("style", { classes: "" })
         };
     }
 }
@@ -537,6 +629,7 @@ class SimpleTagDisplay extends Component {
 
     componentDidMount() {
         this._isMounted = true;
+        ensureDisplayStyles();   // idempotent — injects the zero-specificity default stylesheet once
         this.boundCloseContextMenu = () => this.closeContextMenu();
         // Subscribe this tag (and, if enabled, its .EngUnit) to the shared batched poller.
         this.subscribeTag();
@@ -707,7 +800,7 @@ class SimpleTagDisplay extends Component {
     render() {
         // Extract props - note that props are nested in this.props.props
         const { props } = this.props;
-        const { tagPath, showTagName, showTagValue, tagNameLabel, valuePrecision, row, evenRow, verticalAlign, showUnits, setpoint, boolean: booleanConfig, bounds, tagNameStyle, tagValueStyle } = props;
+        const { tagPath, showTagName, showTagValue, tagNameLabel, valuePrecision, row, evenRow, verticalAlign, showUnits, setpoint, boolean: booleanConfig, bounds, tagNameStyle, tagValueStyle, style: mainStyle } = props;
         const { emit } = this.props;
         
         // Use state for tag value (from polling) and EngUnit
@@ -792,16 +885,34 @@ class SimpleTagDisplay extends Component {
         };
         
         const verticalAlignment = getVerticalAlignment();
-        
+
+        /* -- STYLE CASCADE ---------------------------------------------------
+         * Precedence, per label:
+         *     tagNameStyle / tagValueStyle  >  style (root)  >  built-in defaults
+         *
+         * - CSS *properties* cascade because the root's resolved color/font land
+         *   on the container and the labels no longer hardcode their own, so
+         *   they inherit; a label's own property still wins because it is set
+         *   inline on that label.
+         * - CSS *classes* cascade because a label with no class of its own is
+         *   given the root's classes; a label with its own class keeps it.
+         * - The built-in defaults live in a `:where()` stylesheet (SECTION 0a)
+         *   so they lose to both of the above instead of beating them.
+         * -------------------------------------------------------------------- */
+        const mainStyleObj = mainStyle || {};
+        const mainClasses  = mainStyleObj.classes || '';
+        const mainInline   = cssPropsOf(mainStyleObj);
+
         const containerStyle = {
             ...(emittedProps.style || {}),
+            // emit() is expected to fold the `style` prop's CSS in already; re-applying it
+            // here makes that independent of emit()'s internals and guarantees the prop wins
+            // over anything we default. It must stay ABOVE the layout keys below, which are
+            // driven by dedicated props (row / evenRow / verticalAlign) and stay authoritative.
+            ...mainInline,
             // Only set display: 'flex' if Perspective hasn't set display to 'none' (when display property is false)
             display: emittedDisplay === 'none' ? 'none' : 'flex',
             flexDirection: row ? 'row' : 'column',
-            padding: '10px',
-            borderRadius: '4px',
-            backgroundColor: '#f9f9f9',
-            fontFamily: 'Arial, sans-serif',
             gap: row ? '8px' : '5px',
             ...(row ? {
                 alignItems: verticalAlignment
@@ -810,14 +921,19 @@ class SimpleTagDisplay extends Component {
                 alignItems: 'stretch'
             })
         };
-        
-        // Calculate font sizes - check style.fontSize first, then fall back to auto-sizing
+
+        // Calculate font sizes - own style wins, then the root style, then auto-sizing.
+        // The result is published as a CSS custom property on the root (not as an inline
+        // font-size on the label) so a style class can still override it.
         const calculateFontSize = (styleObj, isValue = false) => {
-            // First, check if fontSize is set in the style object
+            // First, check if fontSize is set in the style object, then on the root style
             if (styleObj && styleObj.fontSize) {
                 return styleObj.fontSize;
             }
-            
+            if (mainInline.fontSize) {
+                return mainInline.fontSize;
+            }
+
             // If no fontSize in style, use auto-sizing based on component dimensions
             const { componentWidth, componentHeight } = this.state;
             if (componentWidth > 0 && componentHeight > 0) {
@@ -843,53 +959,42 @@ class SimpleTagDisplay extends Component {
             return 'auto'; // Auto width in row mode when evenRow is false
         };
         
-        // Process tagNameStyle: extract classes and other CSS properties
-        const tagNameStyleObj = tagNameStyle || {};
-        const tagNameClasses = tagNameStyleObj.classes || '';
-        // Extract all properties except 'classes' for inline styles
-        const tagNameInlineStyles = {};
-        Object.keys(tagNameStyleObj).forEach(key => {
-            if (key !== 'classes') {
-                // Convert kebab-case to camelCase (e.g., 'font-size' -> 'fontSize')
-                const camelKey = key.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
-                tagNameInlineStyles[camelKey] = tagNameStyleObj[key];
-            }
-        });
-        
-        // Process tagValueStyle: extract classes and other CSS properties
+        // Process tagNameStyle / tagValueStyle: split each into classes + CSS properties
+        const tagNameStyleObj  = tagNameStyle || {};
+        const tagNameClasses   = tagNameStyleObj.classes || '';
+        const tagNameInlineStyles = cssPropsOf(tagNameStyleObj);
+
         const tagValueStyleObj = tagValueStyle || {};
-        const tagValueClasses = tagValueStyleObj.classes || '';
-        // Extract all properties except 'classes' for inline styles
-        const tagValueInlineStyles = {};
-        Object.keys(tagValueStyleObj).forEach(key => {
-            if (key !== 'classes') {
-                // Convert kebab-case to camelCase (e.g., 'font-size' -> 'fontSize')
-                const camelKey = key.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
-                tagValueInlineStyles[camelKey] = tagValueStyleObj[key];
-            }
-        });
-        
-        // Base styles for tag name label
-        // Default textAlign to 'center', but check if it's set in tagNameStyle
+        const tagValueClasses  = tagValueStyleObj.classes || '';
+        const tagValueInlineStyles = cssPropsOf(tagValueStyleObj);
+
+        // Font sizes ride on custom properties consumed by the :where() rules, so a style
+        // class can override them (an inline font-size here could not be overridden).
+        containerStyle['--std-name-size']  = calculateFontSize(tagNameStyleObj, false);
+        containerStyle['--std-value-size'] = calculateFontSize(tagValueStyleObj, true);
+        // Same trick for the two other properties the label rules declare: only publish them
+        // when the root style actually sets one, otherwise the CSS fallback (bold/normal,
+        // center) applies. A label's own tagNameStyle/tagValueStyle still overrides inline.
+        if (mainInline.textAlign)  containerStyle['--std-text-align']  = mainInline.textAlign;
+        if (mainInline.fontWeight) containerStyle['--std-font-weight'] = mainInline.fontWeight;
+
+        // Base styles for tag name label.
+        // font-size / font-weight / text-align now come from the :where() stylesheet, and
+        // color is deliberately NOT set so the label inherits the root's color — which is
+        // the theme's text color, or whatever `style` sets. Only layout stays inline.
         const baseLabelStyle = {
-            fontSize: calculateFontSize(tagNameStyleObj, false),
-            fontWeight: 'bold',
-            color: '#333',
-            transition: 'font-size 0.2s ease', // Smooth transition when size changes
-            textAlign: tagNameStyleObj.textAlign || 'center', // Default to center, use style if set
             width: getWidth()
         };
-        
-        // Base styles for tag value label
-        // Default textAlign to 'center', but check if it's set in tagValueStyle
-        // When setpoint is true, show blue and pointer cursor
+
+        // Base styles for tag value label. Same as above, except for two *state* colors that
+        // carry meaning rather than styling: blue = writable setpoint, grey = disconnected.
+        // A connected, non-setpoint value sets no color at all, so it inherits the theme's.
+        // Either way tagValueStyle spreads last and can override them.
+        const stateColor = (setpoint && isConnected) ? '#0066CC'
+                         : (!isConnected ? '#999' : null);
         const baseValueStyle = {
-            fontSize: calculateFontSize(tagValueStyleObj, true),
-            color: (setpoint && isConnected) ? '#0066CC' : (isConnected ? '#000' : '#999'),
-            fontWeight: 'normal',
-            transition: 'font-size 0.2s ease', // Smooth transition when size changes
-            textAlign: tagValueStyleObj.textAlign || 'center', // Default to center, use style if set
             width: getWidth(),
+            ...(stateColor ? { color: stateColor } : {}),
             ...(setpoint ? { cursor: 'pointer' } : {})
         };
         
@@ -918,15 +1023,25 @@ class SimpleTagDisplay extends Component {
         // Merge user-provided inline styles with base styles
         // User styles will override base styles, but base styles provide defaults
         // Note: fontSize is already handled in calculateFontSize, so if it's in inlineStyles it will override
+        // The root `style` prop is NOT spread in here: its inheritable properties (color,
+        // font-family, and the three routed through custom properties) already reach the
+        // label from the root, and spreading it would also copy box properties like padding
+        // and background onto both labels — and would outrank the label's own style class.
         const labelStyle = {
             ...baseLabelStyle,
             ...tagNameInlineStyles
         };
-        
+
         const valueStyle = {
             ...baseValueStyle,
             ...tagValueInlineStyles
         };
+
+        // Class cascade: a label with no class of its own inherits the root's classes, so a
+        // class set on `style` styles the name and value too. A label that has its own class
+        // keeps it and the root's is not added, which is what makes the label's class win.
+        const nameClassName  = ['std-tag-name',  tagNameClasses  || mainClasses].filter(Boolean).join(' ');
+        const valueClassName = ['std-tag-value', tagValueClasses || mainClasses].filter(Boolean).join(' ');
         
         // Format display text based on row mode
         let displayTagName = tagName;
@@ -940,16 +1055,16 @@ class SimpleTagDisplay extends Component {
         // Create the children elements with both style and className
         const children = [];
         if (showTagName) {
-            children.push(React.createElement('div', { 
-                style: labelStyle, 
-                className: tagNameClasses || undefined,
-                key: 'tagName' 
+            children.push(React.createElement('div', {
+                style: labelStyle,
+                className: nameClassName,
+                key: 'tagName'
             }, displayTagName));
         }
         if (showTagValue) {
-            const valueDivProps = { 
-                style: valueStyle, 
-                className: tagValueClasses || undefined,
+            const valueDivProps = {
+                style: valueStyle,
+                className: valueClassName,
                 key: 'tagValue',
                 onContextMenu: this.onValueContextMenu
             };
@@ -1071,9 +1186,14 @@ class SimpleTagDisplay extends Component {
         // Return the component with proper emit() spread to handle flex container properties
         // The emit() function provides: ref, style (with flex properties), className, event handlers, etc.
         // We merge our custom styles while preserving all emit() properties
-        return React.createElement('div', 
+        return React.createElement('div',
             {
                 ...emittedProps,
+                // emit() is expected to put both our marker class and the `style` prop's
+                // classes on the root; re-adding them makes that independent of emit()'s
+                // internals. Repeating a class name in the attribute is harmless.
+                className: ['simple-tag-display-component', emittedProps.className, mainClasses]
+                    .filter(Boolean).join(' '),
                 style: containerStyle
             },
             ...children,
@@ -1403,6 +1523,29 @@ class CtgChart extends Component {
                 const nowSec = Date.now() / 1000;
                 if (this._zoomedMax >= nowSec - 2) {
                     endMs = Math.max(endMs, Date.now());
+                }
+                /* -- CONTEXT LOOKBACK (why the line used to vanish when zoomed in) ------
+                 * The historian query used to span exactly the visible window. Zoom in
+                 * far enough and that window gets narrower than the tag's logging
+                 * interval, so it contains NO stored sample at all. The aggregated query
+                 * then returns only empty buckets, which come back as NaN and are dropped
+                 * server-side (TagHistoryQuery skips NaN so Gson can't emit invalid JSON).
+                 * Result: an empty series — no line, no Min/Max in the legend, and the
+                 * only thing left to draw was the synthetic live "now" point. One lone dot.
+                 *
+                 * A narrow window also shrinks the bucket size (pointCount buckets across
+                 * minutes = sub-second buckets), which makes empty buckets far more likely.
+                 *
+                 * Fix: never ask the historian for less than the configured rangeHours of
+                 * context, anchored at the viewport's right edge. That guarantees real
+                 * samples on both sides of the viewport, so there is a line to draw
+                 * through it, and keeps buckets a sensible size. uPlot clips to the
+                 * viewport, so the extra data costs a query bound by pointCount and is
+                 * never visible.
+                 * --------------------------------------------------------------------- */
+                const minSpanMs = Math.max(0.1, this.getRangeHours()) * 3600 * 1000;
+                if (endMs - startMs < minSpanMs) {
+                    startMs = endMs - minSpanMs;
                 }
                 if (endMs > startMs) {
                     url += '&startTimeMs=' + startMs + '&endTimeMs=' + endMs;
