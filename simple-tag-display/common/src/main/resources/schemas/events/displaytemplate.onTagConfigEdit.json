@@ -1,0 +1,79 @@
+{
+  "type": "object",
+  "description": "Fired on the gateway after an attempt to change the tag's units or engineering limits (success or failure), before the client gets the result. Like every component event, this payload can be imitated by a page script; the audit log (auditId) is the authoritative record.",
+  "properties": {
+    "tagPath": {
+      "type": "string",
+      "description": "Full path of the edited tag."
+    },
+    "engUnit": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "New Engineering Units (null = not changed)."
+    },
+    "engLow": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "description": "New Engineering Low Limit (null = not changed)."
+    },
+    "engHigh": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "description": "New Engineering High Limit (null = not changed)."
+    },
+    "previousEngUnit": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Engineering Units before the edit."
+    },
+    "previousEngLow": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "description": "Engineering Low Limit before the edit."
+    },
+    "previousEngHigh": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "description": "Engineering High Limit before the edit."
+    },
+    "success": {
+      "type": "boolean",
+      "description": "True when the tag configuration was saved."
+    },
+    "quality": {
+      "type": "string",
+      "description": "Save result quality name."
+    },
+    "errorCode": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Error code when success is false, else null."
+    },
+    "user": {
+      "type": "string",
+      "description": "User name of the Perspective session."
+    },
+    "timestamp": {
+      "type": "number",
+      "description": "Gateway time of the edit, epoch milliseconds."
+    },
+    "auditId": {
+      "type": "string",
+      "description": "Id of the matching audit record / SimpleTagDisplay.Audit log line."
+    }
+  }
+}

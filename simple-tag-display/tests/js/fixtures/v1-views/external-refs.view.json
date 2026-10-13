@@ -1,0 +1,63 @@
+{
+  "custom": {},
+  "params": { "showTagName": true },
+  "props": {},
+  "scripts": {
+    "customMethods": [
+      { "name": "hideNames", "params": [], "script": "\tfor c in self.getChildren():\n\t\tc.props.showTagName = False" }
+    ],
+    "messageHandlers": [
+      {
+        "messageType": "set-range", "pageScope": true, "sessionScope": false, "viewScope": false,
+        "script": "\tchart = self.getChild('root').getChild('CTG-Chart')\n\tchart.props['rangeHours'] = payload['hours']\n\tchart.props.timeRange.mode = 'realtime'"
+      }
+    ]
+  },
+  "root": {
+    "type": "ia.container.flex",
+    "meta": { "name": "root" },
+    "props": { "direction": "column" },
+    "children": [
+      {
+        "type": "com.example.simpletagdisplay.SimpleTagDisplay",
+        "meta": { "name": "DisplayTemplate" },
+        "props": { "tagPath": "[default]CTG/Temp", "showUnits": true }
+      },
+      {
+        "type": "com.example.simpletagdisplay.CtgChart",
+        "meta": { "name": "CTG-Chart" },
+        "props": { "rangeHours": 2 }
+      },
+      {
+        "type": "ia.display.label",
+        "meta": { "name": "RangeLabel" },
+        "propConfig": {
+          "props.text": { "binding": { "type": "expr", "config": { "expression": "'Last ' + {../CTG-Chart.props.rangeHours} + ' h'" } } },
+          "props.style.color": { "binding": { "type": "property", "config": { "path": "../DisplayTemplate.props.bounds.minColor" } } }
+        },
+        "props": { "text": "props.showUnits in static text is data, not a reference" }
+      },
+      {
+        "type": "ia.input.button",
+        "meta": { "name": "Enable" },
+        "events": {
+          "component": {
+            "onActionPerformed": {
+              "type": "script", "scope": "G",
+              "config": { "script": "\tself.getSibling('DisplayTemplate').props.setpoint = True\n\tself.getSibling('DisplayTemplate').props.setpoint.enabled = True" }
+            }
+          }
+        },
+        "props": { "text": "Enable writes" }
+      },
+      {
+        "type": "ia.display.label",
+        "meta": { "name": "ParamsOnly" },
+        "propConfig": {
+          "props.text": { "binding": { "type": "expr", "config": { "expression": "{view.params.showTagName}" } } }
+        },
+        "props": { "text": "" }
+      }
+    ]
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "description": "Fired on the gateway after the tag was added to or removed from the session trend list. Like every component event, this payload can be imitated by a page script; the audit log (auditId) is the authoritative record.",
+  "properties": {
+    "action": {
+      "type": "string",
+      "description": "\"add\" or \"remove\"."
+    },
+    "tagPath": {
+      "type": "string",
+      "description": "Full path of the tag."
+    },
+    "group": {
+      "type": "string",
+      "description": "Trend group (trendGroup) that changed."
+    },
+    "user": {
+      "type": "string",
+      "description": "User name of the Perspective session."
+    },
+    "timestamp": {
+      "type": "number",
+      "description": "Gateway time, epoch milliseconds."
+    }
+  }
+}

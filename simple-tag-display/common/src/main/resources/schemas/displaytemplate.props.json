@@ -1,0 +1,1620 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "tagPath": {
+      "type": "string",
+      "default": "",
+      "maxLength": 1024,
+      "description": "[S] Tag to show, with provider, e.g. [default]Area/Tank1/Level. Must be a tag, not a property (.EngUnit) or alarm path. May be bound to a view parameter. Note: users can open popups and pages with any parameters, so never bind the write and edit gates (setpoint.enabled, setpoint.access, limits, options) to view parameters."
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "[S] Turns off every interaction: when false the value still updates, but the right-click menu, setpoint editing and trending are disabled. To control WHO may edit, use setpoint.enabled and setpoint.access instead. Enforced on the gateway."
+    },
+    "trendGroup": {
+      "type": "string",
+      "default": "default",
+      "maxLength": 64,
+      "description": "[S] Session trend list that 'Trend Tag' adds to. Click To Graph Charts with the same trendGroup show the tags trended here. Use one group per plant area. Letters, digits, '_', '.', '-' (other characters become '_')."
+    },
+    "label": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The tag name shown above (or beside) the value.",
+      "default": {
+        "visible": true,
+        "text": "",
+        "suffix": ":",
+        "pathTooltip": true,
+        "style": {
+          "classes": ""
+        }
+      },
+      "properties": {
+        "visible": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the label."
+        },
+        "text": {
+          "type": "string",
+          "default": "",
+          "description": "Label text. Empty = the tag's name (last part of tagPath)."
+        },
+        "suffix": {
+          "type": "string",
+          "default": ":",
+          "description": "Text added after the label in row layout (e.g. 'Temp:'). Not used in column layout."
+        },
+        "pathTooltip": {
+          "type": "boolean",
+          "default": true,
+          "description": "Hovering the label shows the full tag path."
+        },
+        "style": {
+          "$ref": "urn:ignition-schema:schemas/style-properties.schema.json",
+          "default": {
+            "classes": ""
+          },
+          "description": "Style for the label only. Overrides the component style for the label."
+        }
+      }
+    },
+    "value": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "How the tag value is shown.",
+      "default": {
+        "visible": true,
+        "format": "",
+        "decimals": null,
+        "dateFormat": "YYYY-MM-DD HH:mm:ss",
+        "nullText": "—",
+        "loadingText": "…",
+        "maxArrayItems": 10,
+        "style": {
+          "classes": ""
+        }
+      },
+      "properties": {
+        "visible": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the value."
+        },
+        "format": {
+          "type": "string",
+          "default": "",
+          "description": "Number pattern, e.g. '#,##0.00', '0.0', '0%', '0.00E0' (same syntax as the Numeric Entry Field format). Empty = use the tag's Format String property (Ignition default '#,##0.##', so integer tags show no decimals)."
+        },
+        "decimals": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null,
+          "minimum": 0,
+          "maximum": 15,
+          "description": "Fixed number of decimal places. When set it overrides format. Empty = use format."
+        },
+        "dateFormat": {
+          "type": "string",
+          "default": "YYYY-MM-DD HH:mm:ss",
+          "description": "Format for DateTime tags, shown in the session time zone. Tokens: YYYY YY MMMM MMM MM M DD D HH H hh h mm ss SSS A ZZ; other text is copied as is."
+        },
+        "nullText": {
+          "type": "string",
+          "default": "—",
+          "description": "Text shown when the tag value is null."
+        },
+        "loadingText": {
+          "type": "string",
+          "default": "…",
+          "description": "Text shown until the first value arrives."
+        },
+        "maxArrayItems": {
+          "type": "integer",
+          "default": 10,
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Array tags: number of elements shown before '... (+N)'. The gateway sends at most 100 elements."
+        },
+        "style": {
+          "$ref": "urn:ignition-schema:schemas/style-properties.schema.json",
+          "default": {
+            "classes": ""
+          },
+          "description": "Style for the value only. Overrides the component style for the value. Alarm, bounds and setpoint colours are applied underneath this style, so a colour set here wins over them."
+        }
+      }
+    },
+    "units": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Engineering units shown after numeric values.",
+      "default": {
+        "visible": true,
+        "text": "",
+        "placement": "value",
+        "style": {
+          "classes": ""
+        }
+      },
+      "properties": {
+        "visible": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show units for numeric values. Nothing is shown when the tag has no Engineering Units and text is empty. Never shown for Boolean, String or state labels."
+        },
+        "text": {
+          "type": "string",
+          "default": "",
+          "description": "Units override. Empty = the tag's Engineering Units (EngUnit)."
+        },
+        "placement": {
+          "type": "string",
+          "enum": [
+            "value",
+            "label"
+          ],
+          "default": "value",
+          "description": "'value': '72.5 degF'. 'label': 'Temp (degF)' (with the label hidden the units stay with the value)."
+        },
+        "style": {
+          "$ref": "urn:ignition-schema:schemas/style-properties.schema.json",
+          "default": {
+            "classes": ""
+          },
+          "description": "Style for the units text."
+        }
+      }
+    },
+    "states": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Text (and style) shown for Boolean and multi-state values instead of the raw value.",
+      "default": {
+        "boolean": {
+          "trueText": "",
+          "falseText": ""
+        },
+        "options": [],
+        "useSetpointOptions": true,
+        "unmatchedText": ""
+      },
+      "properties": {
+        "boolean": {
+          "type": "object",
+          "additionalProperties": false,
+          "default": {
+            "trueText": "",
+            "falseText": ""
+          },
+          "properties": {
+            "trueText": {
+              "type": "string",
+              "default": "",
+              "description": "Shown when a Boolean tag is true. Empty = 'true'. Also used as the button label when writing a Boolean setpoint."
+            },
+            "falseText": {
+              "type": "string",
+              "default": "",
+              "description": "Shown when a Boolean tag is false. Empty = 'false'."
+            }
+          }
+        },
+        "options": {
+          "type": "array",
+          "default": [],
+          "description": "Value-to-label map for multi-state tags, like the Dropdown's options: [{value: 1, label: 'Auto'}]. The first entry whose value equals the tag value wins (numbers compare numerically, true/false also match 1/0).",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "value"
+            ],
+            "properties": {
+              "value": {
+                "description": "Tag value to match."
+              },
+              "label": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "default": "",
+                "description": "Text shown for this value."
+              },
+              "style": {
+                "$ref": "urn:ignition-schema:schemas/style-properties.schema.json",
+                "default": {
+                  "classes": ""
+                },
+                "description": "Optional style applied to the value while this state is shown (e.g. a background colour for 'Fault')."
+              }
+            }
+          }
+        },
+        "useSetpointOptions": {
+          "type": "boolean",
+          "default": true,
+          "description": "When options is empty, show the labels from setpoint.options for matching values."
+        },
+        "unmatchedText": {
+          "type": "string",
+          "default": "",
+          "description": "Shown when options are configured but none matches. Empty = the formatted raw value."
+        }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "How tag quality and lost connections are shown. Quality uses its own colours (not alarm colours).",
+      "default": {
+        "indicator": "icon",
+        "markUncertain": true,
+        "hideValueOnBad": false,
+        "badText": ""
+      },
+      "properties": {
+        "indicator": {
+          "type": "string",
+          "enum": [
+            "icon",
+            "style",
+            "none"
+          ],
+          "default": "icon",
+          "description": "'icon': small quality icon plus outline. 'style': outline only. 'none': no quality cue (not recommended)."
+        },
+        "markUncertain": {
+          "type": "boolean",
+          "default": true,
+          "description": "Also mark Uncertain quality (e.g. last known value)."
+        },
+        "hideValueOnBad": {
+          "type": "boolean",
+          "default": false,
+          "description": "Replace the value with badText while quality is Bad or Error; no bounds or threshold colours are derived from the hidden value. Default keeps the last value and marks it, like Perspective bindings."
+        },
+        "badText": {
+          "type": "string",
+          "default": "",
+          "description": "Text used by hideValueOnBad. Empty = 'Bad quality'."
+        }
+      }
+    },
+    "bounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Mark the value when it is below the low limit or above the high limit. Each limit comes from: the override here, else the setpoint of the tag alarm named below, else the tag's Engineering Low/High. Default look is neutral (border + arrow), so out-of-range is not confused with an alarm.",
+      "default": {
+        "enabled": false,
+        "low": null,
+        "high": null,
+        "useAlarmLimits": true,
+        "lowAlarmName": "",
+        "highAlarmName": "",
+        "useEngLimits": true,
+        "inclusive": true,
+        "compareDisplayed": false,
+        "appearance": "border",
+        "glyphVisible": true,
+        "applyTo": "value",
+        "lowColor": "",
+        "lowTextColor": "",
+        "highColor": "",
+        "highTextColor": ""
+      },
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Turn bounds marking on."
+        },
+        "low": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null,
+          "description": "Low limit override. Bindable (e.g. to an alarm limit on another tag). Empty = fall back."
+        },
+        "high": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null,
+          "description": "High limit override. Empty = fall back."
+        },
+        "useAlarmLimits": {
+          "type": "boolean",
+          "default": true,
+          "description": "Fall back to the SetpointA of the alarms named in lowAlarmName / highAlarmName."
+        },
+        "lowAlarmName": {
+          "type": "string",
+          "default": "",
+          "maxLength": 255,
+          "description": "[S] Name of the tag alarm whose setpoint is the low limit (e.g. 'Low'). Empty = none."
+        },
+        "highAlarmName": {
+          "type": "string",
+          "default": "",
+          "maxLength": 255,
+          "description": "[S] Name of the tag alarm whose setpoint is the high limit (e.g. 'High'). Empty = none."
+        },
+        "useEngLimits": {
+          "type": "boolean",
+          "default": true,
+          "description": "Final fallback to the tag's Engineering Low/High. Tags whose limits were never set report 0 and 100."
+        },
+        "inclusive": {
+          "type": "boolean",
+          "default": true,
+          "description": "A value exactly at a limit is in range (not marked)."
+        },
+        "compareDisplayed": {
+          "type": "boolean",
+          "default": false,
+          "description": "Compare the rounded, displayed number instead of the raw value (99.96 shown as 100.0 then counts as 100.0)."
+        },
+        "appearance": {
+          "type": "string",
+          "enum": [
+            "border",
+            "background",
+            "text"
+          ],
+          "default": "border",
+          "description": "How out-of-range is shown. 'border' (default) uses neutral colours; 'background'/'text' use lowColor/highColor."
+        },
+        "glyphVisible": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a small up/down arrow next to an out-of-range value, so the state is not shown by colour alone."
+        },
+        "applyTo": {
+          "type": "string",
+          "enum": [
+            "value",
+            "component"
+          ],
+          "default": "value",
+          "description": "Mark only the value, or the whole component."
+        },
+        "lowColor": {
+          "type": "string",
+          "format": "color",
+          "default": "",
+          "description": "Colour below the low limit. Empty = theme token --dt-low-color (neutral blue-grey)."
+        },
+        "lowTextColor": {
+          "type": "string",
+          "format": "color",
+          "default": "",
+          "description": "Text colour used with a 'background' appearance below the low limit. Empty = --dt-low-fg."
+        },
+        "highColor": {
+          "type": "string",
+          "format": "color",
+          "default": "",
+          "description": "Colour above the high limit. Empty = --dt-high-color (neutral indigo-grey)."
+        },
+        "highTextColor": {
+          "type": "string",
+          "format": "color",
+          "default": "",
+          "description": "Text colour above the high limit with a 'background' appearance. Empty = --dt-high-fg."
+        }
+      }
+    },
+    "alarms": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Colour the value by the tag's live alarm state. Tags without alarms fall back to the manual thresholds (colorMode 'auto').",
+      "default": {
+        "colorMode": "auto",
+        "basis": "activeOrUnacked",
+        "minPriority": "Low",
+        "indicatorVisible": true,
+        "blink": "indicator",
+        "appearance": "background",
+        "applyTo": "value",
+        "colors": {
+          "critical": "",
+          "criticalText": "",
+          "high": "",
+          "highText": "",
+          "medium": "",
+          "mediumText": "",
+          "low": "",
+          "lowText": "",
+          "diagnostic": "",
+          "diagnosticText": ""
+        },
+        "thresholds": []
+      },
+      "properties": {
+        "colorMode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "live",
+            "thresholds",
+            "off"
+          ],
+          "default": "auto",
+          "description": "[S] 'auto': live alarm priority when the tag has alarms, else thresholds. 'live': only live alarms. 'thresholds': only the manual thresholds. 'off': no alarm colours. The gateway subscribes to the tag's alarm state only for 'auto' and 'live'."
+        },
+        "basis": {
+          "type": "string",
+          "enum": [
+            "active",
+            "activeOrUnacked"
+          ],
+          "default": "activeOrUnacked",
+          "description": "'active': colour only while an alarm is active, never blinking (the gateway reports only the highest active and the highest unacknowledged priority, so whether the active alarm is acknowledged cannot be told). 'activeOrUnacked': the higher of the active and the unacknowledged priority, blinking while any alarm at or above minPriority is unacknowledged (also after it cleared)."
+        },
+        "minPriority": {
+          "type": "string",
+          "enum": [
+            "Diagnostic",
+            "Low",
+            "Medium",
+            "High",
+            "Critical"
+          ],
+          "default": "Low",
+          "description": "Lowest priority that colours the value."
+        },
+        "indicatorVisible": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the priority marker (shape + number 1-4) next to the value, so an alarm is not shown by colour alone."
+        },
+        "blink": {
+          "type": "string",
+          "enum": [
+            "indicator",
+            "value",
+            "off"
+          ],
+          "default": "indicator",
+          "description": "Blink while unacknowledged. 'indicator': only the priority marker (or the outline when the marker is hidden) blinks, the value stays readable. 'value': the whole coloured area blinks. 'off': no blinking. Never blinks when the user prefers reduced motion."
+        },
+        "appearance": {
+          "type": "string",
+          "enum": [
+            "background",
+            "text",
+            "border"
+          ],
+          "default": "background",
+          "description": "How the alarm colour is applied."
+        },
+        "applyTo": {
+          "type": "string",
+          "enum": [
+            "value",
+            "component"
+          ],
+          "default": "value",
+          "description": "Colour only the value, or the whole component."
+        },
+        "colors": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Per-priority colours. Empty = theme tokens --dt-alarm-<priority>-bg / -fg.",
+          "default": {
+            "critical": "",
+            "criticalText": "",
+            "high": "",
+            "highText": "",
+            "medium": "",
+            "mediumText": "",
+            "low": "",
+            "lowText": "",
+            "diagnostic": "",
+            "diagnosticText": ""
+          },
+          "properties": {
+            "critical": {
+              "type": "string",
+              "format": "color",
+              "default": ""
+            },
+            "criticalText": {
+              "type": "string",
+              "format": "color",
+              "default": ""
+            },
+            "high": {
+              "type": "string",
+              "format": "color",
+              "default": ""
+            },
+            "highText": {
+              "type": "string",
+              "format": "color",
+              "default": ""
+            },
+            "medium": {
+              "type": "string",
+              "format": "color",
+              "default": ""
+            },
+            "mediumText": {
+              "type": "string",
+              "format": "color",
+              "default": ""
+            },
+            "low": {
+              "type": "string",
+              "format": "color",
+              "default": ""
+            },
+            "lowText": {
+              "type": "string",
+              "format": "color",
+              "default": ""
+            },
+            "diagnostic": {
+              "type": "string",
+              "format": "color",
+              "default": ""
+            },
+            "diagnosticText": {
+              "type": "string",
+              "format": "color",
+              "default": ""
+            }
+          }
+        },
+        "thresholds": {
+          "type": "array",
+          "default": [],
+          "description": "Manual alarm levels used when the tag has no alarms: [{priority:'Medium', above:80}, {priority:'Critical', above:95}]. The highest matching priority wins. Thresholds never blink.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "priority"
+            ],
+            "properties": {
+              "priority": {
+                "type": "string",
+                "enum": [
+                  "Diagnostic",
+                  "Low",
+                  "Medium",
+                  "High",
+                  "Critical"
+                ],
+                "default": "Medium"
+              },
+              "above": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null,
+                "description": "Matches when the value is above this (or equal, if inclusive)."
+              },
+              "below": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null,
+                "description": "Matches when the value is below this (or equal, if inclusive)."
+              },
+              "inclusive": {
+                "type": "boolean",
+                "default": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "setpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Let operators write a new value to the tag. Every rule marked [S] is checked on the gateway; the gateway administrator can also set stricter gateway-wide rules.",
+      "default": {
+        "enabled": false,
+        "access": {
+          "roles": [],
+          "securityLevels": [],
+          "requireLogin": false
+        },
+        "limits": {
+          "useEngLimits": true,
+          "low": null,
+          "high": null,
+          "inclusive": true
+        },
+        "maxStep": null,
+        "maxStepPercent": null,
+        "options": [],
+        "maxStringLength": 255,
+        "allowOnBadQuality": false,
+        "mode": "popup",
+        "confirm": "discrete",
+        "confirmAbovePercent": null,
+        "verifyMs": 3000,
+        "color": "",
+        "style": {
+          "classes": ""
+        },
+        "editIconVisible": false,
+        "optionsControl": "auto",
+        "spinner": {
+          "enabled": false,
+          "increment": 1
+        },
+        "commitOnBlur": false,
+        "placeholder": "",
+        "whenNotAllowed": "disable",
+        "popup": {
+          "title": "",
+          "position": "center",
+          "tagPathVisible": true,
+          "limitsVisible": true,
+          "dismissOnBackdrop": true,
+          "closeOnSuccess": true
+        }
+      },
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "[S] Allow writing a new value to the tag. Checked on the gateway together with access and the tag's own write permissions. Do not bind it to a view parameter."
+        },
+        "access": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "[S] Who may write. Checked on the gateway.",
+          "default": {
+            "roles": [],
+            "securityLevels": [],
+            "requireLogin": false
+          },
+          "properties": {
+            "roles": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": [],
+              "description": "[S] User needs at least ONE of these roles (exact, case-sensitive names). Empty = no role needed (tag write permissions still apply)."
+            },
+            "securityLevels": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": [],
+              "description": "[S] User needs at least ONE of these security-level paths, e.g. 'Authenticated/Roles/Operator' or 'SecurityZones/ControlRoom'."
+            },
+            "requireLogin": {
+              "type": "boolean",
+              "default": false,
+              "description": "[S] Require a logged-in user even when roles is empty. Off by default, like native Perspective writes: the tag's own Write Permissions still apply to anonymous sessions. The gateway setting ctg.write.requireAuthenticated=true forces a login for every display."
+            }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "[S] Range check for numeric writes (also checked on the gateway). A misconfigured range (low above high) blocks writing.",
+          "default": {
+            "useEngLimits": true,
+            "low": null,
+            "high": null,
+            "inclusive": true
+          },
+          "properties": {
+            "useEngLimits": {
+              "type": "boolean",
+              "default": true,
+              "description": "[S] Reject numeric values outside the tag's Engineering Low/High. If those cannot be read, writing is blocked. Note: tags whose limits were never set report 0 and 100."
+            },
+            "low": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null,
+              "description": "[S] Override for the low limit. Empty = use EngLow (if useEngLimits)."
+            },
+            "high": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null,
+              "description": "[S] Override for the high limit. Empty = use EngHigh (if useEngLimits)."
+            },
+            "inclusive": {
+              "type": "boolean",
+              "default": true,
+              "description": "[S] Values exactly at a limit are allowed."
+            }
+          }
+        },
+        "maxStep": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null,
+          "exclusiveMinimum": 0,
+          "description": "[S] Largest allowed change from the current value in one write (absolute, in engineering units). Empty = no step limit."
+        },
+        "maxStepPercent": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null,
+          "exclusiveMinimum": 0,
+          "maximum": 100,
+          "description": "[S] Largest allowed change in one write, as a percent of the allowed range (low to high). Ignored when there is no range. Empty = off."
+        },
+        "options": {
+          "type": "array",
+          "default": [],
+          "description": "[S] Optional list of allowed values (multi-state or Boolean), like the Dropdown's options. When not empty the operator picks from this list and the gateway rejects any other value.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "value"
+            ],
+            "properties": {
+              "value": {
+                "description": "Value written to the tag."
+              },
+              "label": {
+                "type": [
+                  "string",
+                  "number"
+                ],
+                "default": "",
+                "description": "Text shown to the operator."
+              },
+              "isDisabled": {
+                "type": "boolean",
+                "default": false,
+                "description": "Shown but cannot be chosen."
+              }
+            }
+          }
+        },
+        "maxStringLength": {
+          "type": "integer",
+          "default": 255,
+          "minimum": 1,
+          "maximum": 4096,
+          "description": "[S] Maximum length for String tag writes."
+        },
+        "allowOnBadQuality": {
+          "type": "boolean",
+          "default": false,
+          "description": "[S] Allow writing while the current value has Bad or Error quality. Enforced on the gateway."
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "popup",
+            "direct",
+            "protected"
+          ],
+          "default": "popup",
+          "description": "Like the Numeric Entry Field. 'popup': click the value to open a dialog showing the current and new value. 'direct': the value is an input field. 'protected': double-click (double-tap on touch) or a 1 s mouse press on the value to edit it in place."
+        },
+        "confirm": {
+          "type": "string",
+          "enum": [
+            "never",
+            "discrete",
+            "always"
+          ],
+          "default": "discrete",
+          "description": "Ask before writing. 'discrete' (default): Boolean and option writes always need a confirm step (picking a choice never writes on its own). 'always': every write. 'never': no confirm step (numbers still need Enter or Write)."
+        },
+        "confirmAbovePercent": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null,
+          "exclusiveMinimum": 0,
+          "description": "Ask for confirmation when a numeric change is larger than this percent of the allowed range. Screen-only check; use maxStep / maxStepPercent for a gateway-enforced limit. Empty = off."
+        },
+        "verifyMs": {
+          "type": "integer",
+          "default": 3000,
+          "minimum": 0,
+          "maximum": 60000,
+          "description": "After a successful write, warn ('Written, but the tag reads X') if the tag does not show the written value within this time. 0 = off."
+        },
+        "color": {
+          "type": "string",
+          "format": "color",
+          "default": "",
+          "description": "Text colour that marks a writable value. Empty = theme token --dt-setpoint-color (the theme's call-to-action colour)."
+        },
+        "style": {
+          "$ref": "urn:ignition-schema:schemas/style-properties.schema.json",
+          "default": {
+            "classes": ""
+          },
+          "description": "Extra style for the value while it is writable (e.g. underline, border). value.style still wins."
+        },
+        "editIconVisible": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show a small pencil after the value."
+        },
+        "optionsControl": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "buttons",
+            "dropdown"
+          ],
+          "default": "auto",
+          "description": "How Boolean values and options are chosen. 'auto': buttons for up to 5 choices, else a dropdown."
+        },
+        "spinner": {
+          "type": "object",
+          "additionalProperties": false,
+          "default": {
+            "enabled": false,
+            "increment": 1
+          },
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Show - / + buttons next to numeric inputs."
+            },
+            "increment": {
+              "type": "number",
+              "default": 1,
+              "exclusiveMinimum": 0,
+              "description": "Step for the - / + buttons and the arrow keys."
+            }
+          }
+        },
+        "commitOnBlur": {
+          "type": "boolean",
+          "default": false,
+          "description": "direct/protected: leaving the field writes the typed value (Numeric Entry Field behaviour). Off = leaving the field cancels; press Enter to write."
+        },
+        "placeholder": {
+          "type": "string",
+          "default": "",
+          "description": "Hint shown in an empty input."
+        },
+        "whenNotAllowed": {
+          "type": "string",
+          "enum": [
+            "disable",
+            "hide"
+          ],
+          "default": "disable",
+          "description": "When the user may not write: 'disable' keeps the writable look greyed out and explains why on click; 'hide' shows a plain value."
+        },
+        "popup": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Options for mode 'popup' (and 'Set Value...').",
+          "default": {
+            "title": "",
+            "position": "center",
+            "tagPathVisible": true,
+            "limitsVisible": true,
+            "dismissOnBackdrop": true,
+            "closeOnSuccess": true
+          },
+          "properties": {
+            "title": {
+              "type": "string",
+              "default": "",
+              "description": "Dialog title. Empty = 'Set <label>'."
+            },
+            "position": {
+              "type": "string",
+              "enum": [
+                "center",
+                "anchored"
+              ],
+              "default": "center",
+              "description": "Centre of the screen, or next to the component."
+            },
+            "tagPathVisible": {
+              "type": "boolean",
+              "default": true,
+              "description": "Show the tag path under the title."
+            },
+            "limitsVisible": {
+              "type": "boolean",
+              "default": true,
+              "description": "Show the allowed range under the input."
+            },
+            "dismissOnBackdrop": {
+              "type": "boolean",
+              "default": true,
+              "description": "Clicking outside the dialog cancels it."
+            },
+            "closeOnSuccess": {
+              "type": "boolean",
+              "default": true,
+              "description": "Close the dialog after a successful write."
+            }
+          }
+        }
+      }
+    },
+    "menu": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Right-click (or long-press) menu on the component. Each gateway action is also checked on the gateway.",
+      "default": {
+        "enabled": true,
+        "whenNotAllowed": "disable",
+        "headerVisible": true,
+        "longPressMs": 550,
+        "trend": {
+          "enabled": true,
+          "access": {
+            "roles": [],
+            "securityLevels": [],
+            "requireLogin": false
+          },
+          "addLabel": "Trend Tag",
+          "removeLabel": "Remove from Trend"
+        },
+        "trendPage": {
+          "enabled": false,
+          "label": "Go to Trend Page",
+          "pagePath": "",
+          "newTab": false,
+          "addTag": true
+        },
+        "trendPopup": {
+          "enabled": false,
+          "label": "Open Trend Popup",
+          "mode": "trendList",
+          "viewPath": "",
+          "id": "",
+          "title": "",
+          "params": {},
+          "addTag": true,
+          "popup": {
+            "width": 800,
+            "height": 450,
+            "position": "center",
+            "modal": false,
+            "draggable": true,
+            "resizable": true,
+            "showCloseIcon": true,
+            "overlayDismiss": false,
+            "viewportBound": true
+          }
+        },
+        "configEdit": {
+          "enabled": false,
+          "access": {
+            "roles": [],
+            "securityLevels": [],
+            "requireLogin": true
+          },
+          "label": "Tag Configuration…"
+        },
+        "changeHistory": {
+          "enabled": false,
+          "access": {
+            "roles": [],
+            "securityLevels": [],
+            "requireLogin": true
+          },
+          "label": "Change History…",
+          "limit": 20
+        },
+        "setValue": {
+          "enabled": true,
+          "label": "Set Value…"
+        },
+        "copyPath": {
+          "enabled": false,
+          "label": "Copy Tag Path"
+        },
+        "items": []
+      },
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "[S] Show the menu. When meta.contextMenu is enabled, Perspective's own menu is used instead."
+        },
+        "whenNotAllowed": {
+          "type": "string",
+          "enum": [
+            "disable",
+            "hide"
+          ],
+          "default": "disable",
+          "description": "Items the user may not use: greyed out with the reason, or hidden."
+        },
+        "headerVisible": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the tag name at the top of the menu."
+        },
+        "longPressMs": {
+          "type": "integer",
+          "default": 550,
+          "minimum": 300,
+          "maximum": 2000,
+          "description": "Touch: press time that opens the menu."
+        },
+        "trend": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "[S] 'Trend Tag' / 'Remove from Trend'.",
+          "default": {
+            "enabled": true,
+            "access": {
+              "roles": [],
+              "securityLevels": [],
+              "requireLogin": false
+            },
+            "addLabel": "Trend Tag",
+            "removeLabel": "Remove from Trend"
+          },
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "[S] Show the trend items."
+            },
+            "access": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "[S] Who may add/remove this tag from the trend list.",
+              "default": {
+                "roles": [],
+                "securityLevels": [],
+                "requireLogin": false
+              },
+              "properties": {
+                "roles": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": [],
+                  "description": "[S] Any one of these roles."
+                },
+                "securityLevels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": [],
+                  "description": "[S] Any one of these security-level paths."
+                },
+                "requireLogin": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "[S] Require a logged-in user."
+                }
+              }
+            },
+            "addLabel": {
+              "type": "string",
+              "default": "Trend Tag"
+            },
+            "removeLabel": {
+              "type": "string",
+              "default": "Remove from Trend"
+            }
+          }
+        },
+        "trendPage": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Menu item that goes to a page with a trend chart.",
+          "default": {
+            "enabled": false,
+            "label": "Go to Trend Page",
+            "pagePath": "",
+            "newTab": false,
+            "addTag": true
+          },
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "label": {
+              "type": "string",
+              "default": "Go to Trend Page"
+            },
+            "pagePath": {
+              "type": "string",
+              "default": "",
+              "description": "Page URL inside this project, starting with a single '/', e.g. '/trend' or '/trend/{tagName}'. {tagPath}, {tagName} and {trendGroup} are replaced (URL-encoded). Empty = only fire onMenuAction."
+            },
+            "newTab": {
+              "type": "boolean",
+              "default": false,
+              "description": "Open in a new browser tab."
+            },
+            "addTag": {
+              "type": "boolean",
+              "default": true,
+              "description": "Add the tag to the session trend list first (if allowed)."
+            }
+          }
+        },
+        "trendPopup": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Menu item that opens a view with a trend chart in a popup.",
+          "default": {
+            "enabled": false,
+            "label": "Open Trend Popup",
+            "mode": "trendList",
+            "viewPath": "",
+            "id": "",
+            "title": "",
+            "params": {},
+            "addTag": true,
+            "popup": {
+              "width": 800,
+              "height": 450,
+              "position": "center",
+              "modal": false,
+              "draggable": true,
+              "resizable": true,
+              "showCloseIcon": true,
+              "overlayDismiss": false,
+              "viewportBound": true
+            }
+          },
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "label": {
+              "type": "string",
+              "default": "Open Trend Popup"
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "trendList",
+                "singleTag"
+              ],
+              "default": "trendList",
+              "description": "'trendList': the popup shows the session trend list of trendGroup (the tag is added first when addTag). 'singleTag': the popup shows only this tag (the sample view binds pens to the tagPath param and ignores the trend list)."
+            },
+            "viewPath": {
+              "type": "string",
+              "default": "",
+              "description": "View to open, e.g. 'Popups/Trend'. It receives params tagPath, tagName, trendGroup, mode (plus params below). Empty = only fire onMenuAction."
+            },
+            "id": {
+              "type": "string",
+              "default": "",
+              "description": "Popup id. Empty = 'ctg-trend-<trendGroup>' in 'trendList' mode (one trend popup per group; opening again brings it to the front) and 'ctg-trend-<trendGroup>-<tag hash>' in 'singleTag' mode (one popup per tag). An explicit id is used as is: displays that share it share one popup, and opening it again only brings it to the front (it does not switch tags)."
+            },
+            "title": {
+              "type": "string",
+              "default": "",
+              "description": "Popup title. Empty = 'Trend - <label>'."
+            },
+            "params": {
+              "type": "object",
+              "default": {},
+              "description": "Extra view parameters."
+            },
+            "addTag": {
+              "type": "boolean",
+              "default": true,
+              "description": "Add the tag to the session trend list first (if allowed). Ignored in 'singleTag' mode."
+            },
+            "popup": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Popup window options (same names as the Popup action).",
+              "default": {
+                "width": 800,
+                "height": 450,
+                "position": "center",
+                "modal": false,
+                "draggable": true,
+                "resizable": true,
+                "showCloseIcon": true,
+                "overlayDismiss": false,
+                "viewportBound": true
+              },
+              "properties": {
+                "width": {
+                  "type": "number",
+                  "default": 800,
+                  "minimum": 200
+                },
+                "height": {
+                  "type": "number",
+                  "default": 450,
+                  "minimum": 150
+                },
+                "position": {
+                  "type": "string",
+                  "enum": [
+                    "center",
+                    "pointer"
+                  ],
+                  "default": "center"
+                },
+                "modal": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "draggable": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "resizable": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "showCloseIcon": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "overlayDismiss": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "viewportBound": {
+                  "type": "boolean",
+                  "default": true
+                }
+              }
+            }
+          }
+        },
+        "configEdit": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "[S] 'Tag Configuration...' (edit units and engineering limits). Changes the tag for every user and screen.",
+          "default": {
+            "enabled": false,
+            "access": {
+              "roles": [],
+              "securityLevels": [],
+              "requireLogin": true
+            },
+            "label": "Tag Configuration…"
+          },
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "[S] Show 'Tag Configuration...'."
+            },
+            "access": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "[S] Who may edit the tag configuration.",
+              "default": {
+                "roles": [],
+                "securityLevels": [],
+                "requireLogin": true
+              },
+              "properties": {
+                "roles": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": [],
+                  "description": "[S] Any one of these roles."
+                },
+                "securityLevels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": [],
+                  "description": "[S] Any one of these security-level paths."
+                },
+                "requireLogin": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "[S] Require a logged-in user."
+                }
+              }
+            },
+            "label": {
+              "type": "string",
+              "default": "Tag Configuration…"
+            }
+          }
+        },
+        "changeHistory": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "[S] 'Change History...': the last setpoint writes and configuration edits of this tag, read from the project's audit log.",
+          "default": {
+            "enabled": false,
+            "access": {
+              "roles": [],
+              "securityLevels": [],
+              "requireLogin": true
+            },
+            "label": "Change History…",
+            "limit": 20
+          },
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "[S] Show 'Change History...'. Needs an audit profile on the project (or the gateway fallback profile)."
+            },
+            "access": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "[S] Who may see the change history.",
+              "default": {
+                "roles": [],
+                "securityLevels": [],
+                "requireLogin": true
+              },
+              "properties": {
+                "roles": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": [],
+                  "description": "[S] Any one of these roles."
+                },
+                "securityLevels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": [],
+                  "description": "[S] Any one of these security-level paths."
+                },
+                "requireLogin": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "[S] Require a logged-in user."
+                }
+              }
+            },
+            "label": {
+              "type": "string",
+              "default": "Change History…"
+            },
+            "limit": {
+              "type": "integer",
+              "default": 20,
+              "minimum": 1,
+              "maximum": 50,
+              "description": "[S] Number of entries shown (newest first)."
+            }
+          }
+        },
+        "setValue": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "'Set Value...' item (only when setpoint.enabled). Opens the setpoint dialog in any mode.",
+          "default": {
+            "enabled": true,
+            "label": "Set Value…"
+          },
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "label": {
+              "type": "string",
+              "default": "Set Value…"
+            }
+          }
+        },
+        "copyPath": {
+          "type": "object",
+          "additionalProperties": false,
+          "default": {
+            "enabled": false,
+            "label": "Copy Tag Path"
+          },
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Show 'Copy Tag Path'."
+            },
+            "label": {
+              "type": "string",
+              "default": "Copy Tag Path"
+            }
+          }
+        },
+        "items": {
+          "type": "array",
+          "default": [],
+          "description": "Custom items. Clicking one fires the onMenuAction event with action = id (attach a Popup, Navigate or Script action there).",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "label"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "default": ""
+              },
+              "label": {
+                "type": "string",
+                "default": ""
+              },
+              "enabled": {
+                "type": "boolean",
+                "default": true
+              },
+              "separatorBefore": {
+                "type": "boolean",
+                "default": false
+              },
+              "access": {
+                "type": "object",
+                "additionalProperties": false,
+                "description": "Hide or grey the item for users without these roles. Screen-only: the actions you attach run with the user's own rights, so protect them there too.",
+                "default": {
+                  "roles": [],
+                  "securityLevels": [],
+                  "requireLogin": false
+                },
+                "properties": {
+                  "roles": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "default": []
+                  },
+                  "securityLevels": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "default": []
+                  },
+                  "requireLogin": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "layout": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {
+        "direction": "column",
+        "evenSplit": false,
+        "verticalAlign": "center",
+        "gap": "",
+        "autoFontSize": {
+          "enabled": true,
+          "labelScale": 0.12,
+          "valueScale": 0.15,
+          "min": 8,
+          "max": 96
+        }
+      },
+      "properties": {
+        "direction": {
+          "type": "string",
+          "enum": [
+            "column",
+            "row"
+          ],
+          "default": "column",
+          "description": "'column': label above value. 'row': label beside value."
+        },
+        "evenSplit": {
+          "type": "boolean",
+          "default": false,
+          "description": "Row layout: label and value each take half the width."
+        },
+        "verticalAlign": {
+          "type": "string",
+          "enum": [
+            "top",
+            "center",
+            "bottom"
+          ],
+          "default": "center"
+        },
+        "gap": {
+          "type": "string",
+          "default": "",
+          "description": "Space between label and value (CSS length). Empty = 5px column / 8px row."
+        },
+        "autoFontSize": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Scale the text with the component size. A font-size in style, label.style or value.style, or from a style class or project CSS on the root, always wins.",
+          "default": {
+            "enabled": true,
+            "labelScale": 0.12,
+            "valueScale": 0.15,
+            "min": 8,
+            "max": 96
+          },
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "labelScale": {
+              "type": "number",
+              "default": 0.12,
+              "minimum": 0.02,
+              "maximum": 1
+            },
+            "valueScale": {
+              "type": "number",
+              "default": 0.15,
+              "minimum": 0.02,
+              "maximum": 1
+            },
+            "min": {
+              "type": "number",
+              "default": 8,
+              "minimum": 4
+            },
+            "max": {
+              "type": "number",
+              "default": 96,
+              "minimum": 8
+            }
+          }
+        }
+      }
+    },
+    "style": {
+      "$ref": "urn:ignition-schema:schemas/style-properties.schema.json",
+      "default": {
+        "classes": ""
+      },
+      "description": "Style for the whole component. Colour, font and text-align also reach the label and value; label.style / value.style override them. Left alone, the component is transparent and follows the Perspective theme."
+    }
+  }
+}

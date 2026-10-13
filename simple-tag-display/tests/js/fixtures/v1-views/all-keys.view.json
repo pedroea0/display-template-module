@@ -1,0 +1,73 @@
+{
+  "custom": {},
+  "params": {},
+  "props": {},
+  "root": {
+    "type": "ia.container.flex",
+    "meta": { "name": "root" },
+    "props": { "direction": "column" },
+    "children": [
+      {
+        "type": "com.example.simpletagdisplay.SimpleTagDisplay",
+        "meta": { "name": "Full" },
+        "props": {
+          "tagPath": "[default]CTG/TempSP",
+          "showTagName": false,
+          "showTagValue": true,
+          "tagNameLabel": "Setpoint",
+          "valuePrecision": 3,
+          "row": true,
+          "evenRow": true,
+          "verticalAlign": "bottom",
+          "showUnits": true,
+          "boolean": { "textOnTrue": "ON", "textOnFalse": "OFF" },
+          "bounds": { "enabled": true, "minColor": "#0000FF", "maxColor": "#FF00FF", "minInclusive": true, "maxInclusive": true },
+          "setpoint": true,
+          "tagNameStyle": { "classes": "label-cls", "color": "#333333" },
+          "tagValueStyle": { "classes": "", "fontWeight": "bold" },
+          "style": { "classes": "card", "backgroundColor": "#FAFAFA" }
+        }
+      },
+      {
+        "type": "com.example.simpletagdisplay.CtgChart",
+        "meta": { "name": "FullChart" },
+        "props": {
+          "mode": "historical",
+          "rangeHours": 1.5,
+          "pointCount": 20000,
+          "rawHistory": true,
+          "freeRangePanZoom": false,
+          "refreshRate": 100,
+          "startDate": "2026-01-02T03:04:05Z",
+          "endDate": "2026-01-03T00:00:00.000Z",
+          "dateFormat": "DD.MM.YYYY",
+          "timeFormat": "HH:mm",
+          "visibility": {
+            "showDateRangeSelector": false,
+            "showPenControlDisplay": false,
+            "showRefreshButton": false,
+            "showZoomButton": false,
+            "showFullscreenButton": false
+          },
+          "interaction": { "mode": "selection", "xTraceVisible": false },
+          "style": { "classes": "trend" }
+        }
+      },
+      {
+        "type": "com.example.simpletagdisplay.CtgChart",
+        "meta": { "name": "ReducerKeys" },
+        "props": {
+          "rangeHours": 168,
+          "refreshRate": 0,
+          "pointCount": 0,
+          "visibility": {
+            "showModeToggle": false,
+            "showRangePresets": false,
+            "showRefreshRateControl": true,
+            "showLegend": false
+          }
+        }
+      }
+    ]
+  }
+}

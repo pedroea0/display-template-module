@@ -37,6 +37,12 @@ The alias under which your code signing certificate is stored.
 ### alias-pwd
 The password to access the alias.
 
+### keystore-pwd-env / alias-pwd-env
+Name of an environment variable that holds the keystore / alias password, e.g.
+`-keystore-pwd-env=CTG_SIGN_KEYSTORE_PWD`. When given, it wins over `-keystore-pwd` / `-alias-pwd`.
+Prefer this form: a password passed as `-keystore-pwd=...` is visible in the process list and in
+EDR/audit logs of the machine. `sign-module.ps1` always uses the env form.
+
 ### chain
 The path to the certificate chain (in p7b format). This file will is generally returned along with your signed certificate after submitting a CSR to a CA.
 

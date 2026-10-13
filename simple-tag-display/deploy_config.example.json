@@ -2,9 +2,9 @@
   "_comment_1": "Copy this file to deploy_config.local.json (next to deploy_ignition_module.py) and fill in your own values.",
   "_comment_2": "deploy_config.local.json is git-ignored — your API token will NOT be committed.",
   "_comment_3": "Generate an API token in: Gateway → Config → Security → API Keys. It needs permission to manage modules and restart the gateway.",
-  "_comment_4": "All three fields are optional. Anything you omit falls back to the placeholder defaults in deploy_ignition_module.py (which will then error out and prompt you).",
+  "_comment_4": "Lookup order per value: command line, then IGNITION_GATEWAY_URL / IGNITION_API_TOKEN, then --config FILE, then %APPDATA%/ctg-module/deploy.json, then this file (as deploy_config.local.json). A malformed file is an error (exit 2).",
 
   "gateway_url": "http://your-gateway-host:8088",
-  "api_token": "PE:your-api-token-here",
+  "api_token": "my-key:your-api-token-here",
   "module_id": "com.example.simpletagdisplay.SimpleTagDisplay"
 }

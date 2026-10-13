@@ -1,0 +1,120 @@
+{
+  "custom": {},
+  "params": {},
+  "props": {
+    "defaultSize": {
+      "width": 1200,
+      "height": 800
+    }
+  },
+  "root": {
+    "type": "ia.container.flex",
+    "version": 0,
+    "meta": {
+      "name": "root"
+    },
+    "props": {
+      "direction": "column",
+      "style": {
+        "padding": "8px"
+      }
+    },
+    "children": [
+      {
+        "type": "ia.display.label",
+        "version": 0,
+        "meta": {
+          "name": "Title"
+        },
+        "position": {
+          "basis": "32px",
+          "shrink": 0
+        },
+        "props": {
+          "text": "CTG_Test smoke view"
+        }
+      },
+      {
+        "type": "ia.display.label",
+        "version": 0,
+        "meta": {
+          "name": "User",
+          "domId": "ctg-user"
+        },
+        "position": {
+          "basis": "24px",
+          "shrink": 0
+        },
+        "propConfig": {
+          "props.text": {
+            "binding": {
+              "type": "expr",
+              "config": {
+                "expression": "'user=' + {session.props.auth.user.userName} + ' roles=' + {session.props.auth.user.roles}"
+              }
+            }
+          }
+        },
+        "props": {}
+      },
+      {
+        "type": "com.example.simpletagdisplay.SimpleTagDisplay",
+        "version": 0,
+        "meta": {
+          "name": "Temp"
+        },
+        "position": {
+          "basis": "60px",
+          "shrink": 0
+        },
+        "props": {
+          "tagPath": "[default]CTG/Temp",
+          "showUnits": true
+        }
+      },
+      {
+        "type": "com.example.simpletagdisplay.SimpleTagDisplay",
+        "version": 0,
+        "meta": {
+          "name": "Pressure"
+        },
+        "position": {
+          "basis": "60px",
+          "shrink": 0
+        },
+        "props": {
+          "tagPath": "[default]CTG/Pressure",
+          "showUnits": true
+        }
+      },
+      {
+        "type": "com.example.simpletagdisplay.SimpleTagDisplay",
+        "version": 0,
+        "meta": {
+          "name": "Running"
+        },
+        "position": {
+          "basis": "60px",
+          "shrink": 0
+        },
+        "props": {
+          "tagPath": "[default]CTG/Running"
+        }
+      },
+      {
+        "type": "com.example.simpletagdisplay.CtgChart",
+        "version": 0,
+        "meta": {
+          "name": "Chart"
+        },
+        "position": {
+          "basis": "450px",
+          "grow": 1
+        },
+        "props": {
+          "rangeHours": 0.25
+        }
+      }
+    ]
+  }
+}

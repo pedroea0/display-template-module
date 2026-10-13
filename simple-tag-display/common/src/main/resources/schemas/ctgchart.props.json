@@ -1,0 +1,3230 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "[S] When false the chart still shows and refreshes data, but every user action that changes something (settings, tag browser, removing pens, annotations, adding/removing trend tags) is disabled. Viewing actions (zoom, pan, X-Trace, range brush, export) stay available. Enforced on the gateway."
+    },
+    "title": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {
+        "visible": false,
+        "text": "",
+        "style": {
+          "classes": ""
+        }
+      },
+      "description": "Optional title above the toolbar.",
+      "properties": {
+        "visible": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show the title row."
+        },
+        "text": {
+          "type": "string",
+          "default": "",
+          "description": "Title text (plain text, never HTML)."
+        },
+        "style": {
+          "$ref": "urn:ignition-schema:schemas/style-properties.schema.json",
+          "default": {
+            "classes": ""
+          }
+        }
+      }
+    },
+    "pens": {
+      "type": "array",
+      "default": [],
+      "description": "Pens configured in the Designer. Runtime edits made in the chart's settings panel and tag browser are written back here (while the page is open). Pens added at runtime must be inside readScope, else they show 'Out of scope'. Tags trended with right-click 'Trend Tag' are NOT stored here; see trendGroup / trendPens.",
+      "items": {
+        "type": "object",
+        "required": [
+          "tagPath"
+        ],
+        "additionalProperties": false,
+        "default": {
+          "tagPath": "",
+          "name": "",
+          "enabled": true,
+          "visible": true,
+          "aggregation": "default",
+          "color": "",
+          "axis": "",
+          "plot": 0,
+          "units": "",
+          "format": "",
+          "display": {
+            "type": "line",
+            "interpolation": "linear",
+            "breakLine": true,
+            "width": 1.5,
+            "dash": [],
+            "fillOpacity": 0.2,
+            "radius": 3,
+            "states": {
+              "bad": {
+                "style": "hatch",
+                "color": ""
+              },
+              "outOfBounds": {
+                "enabled": false,
+                "source": "engineering",
+                "low": null,
+                "high": null,
+                "color": "",
+                "width": 0
+              },
+              "boolean": {
+                "enabled": false,
+                "onColor": "",
+                "offColor": "",
+                "fillOpacity": 0.15
+              }
+            }
+          }
+        },
+        "properties": {
+          "tagPath": {
+            "type": "string",
+            "default": "",
+            "description": "Tag to trend, with provider, e.g. [default]Area1/Tank1/Level. Must be a numeric or Boolean tag with history enabled."
+          },
+          "name": {
+            "type": "string",
+            "default": "",
+            "description": "Pen label. Empty = tag name (made unique automatically when two pens share a tag name)."
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true,
+            "description": "Disabled pens are not queried and are not shown (not even in the pen table)."
+          },
+          "visible": {
+            "type": "boolean",
+            "default": true,
+            "description": "Hidden pens are still queried and listed in the pen table (greyed) so they can be switched back on instantly."
+          },
+          "aggregation": {
+            "type": "string",
+            "default": "default",
+            "enum": [
+              "default",
+              "LastValue",
+              "SimpleAverage",
+              "Average",
+              "Minimum",
+              "Maximum",
+              "MinMax",
+              "Range",
+              "Count",
+              "Sum",
+              "StdDev",
+              "Variance",
+              "DurationOn",
+              "DurationOff",
+              "CountOn",
+              "CountOff",
+              "PctGood",
+              "PctBad"
+            ],
+            "description": "History aggregation for this pen when the chart queries aggregated data. 'default' uses query.aggregation. Statistic aggregations (Range, Count, Sum, StdDev, Variance, DurationOn/Off, CountOn/Off, PctGood/Bad) keep the chart aggregated in query.mode 'auto', take no live tag values, and draw a Boolean tag on a normal axis; with query.mode 'raw' the aggregation does not apply."
+          },
+          "color": {
+            "type": "string",
+            "format": "color",
+            "default": "",
+            "description": "Line/fill colour. Empty = next free colour of appearance.palette (stable per pen)."
+          },
+          "axis": {
+            "type": "string",
+            "default": "",
+            "description": "Name of an entry in 'axes'. Empty = automatic axis (pens with the same engineering units and similar ranges share one; pens without units get their own)."
+          },
+          "plot": {
+            "type": "integer",
+            "default": 0,
+            "minimum": 0,
+            "maximum": 7,
+            "description": "Index of the stacked plot (see 'plots') this pen is drawn in. Out-of-range values use the last plot."
+          },
+          "units": {
+            "type": "string",
+            "default": "",
+            "description": "Units shown in the pen table and X-Trace box. Empty = the tag's EngUnit."
+          },
+          "format": {
+            "type": "string",
+            "default": "",
+            "description": "Number format, e.g. '#,##0.00' or '0,0.##'. Empty = the tag's FormatString, else automatic."
+          },
+          "display": {
+            "type": "object",
+            "additionalProperties": false,
+            "default": {
+              "type": "line",
+              "interpolation": "linear",
+              "breakLine": true,
+              "width": 1.5,
+              "dash": [],
+              "fillOpacity": 0.2,
+              "radius": 3,
+              "states": {
+                "bad": {
+                  "style": "hatch",
+                  "color": ""
+                },
+                "outOfBounds": {
+                  "enabled": false,
+                  "source": "engineering",
+                  "low": null,
+                  "high": null,
+                  "color": "",
+                  "width": 0
+                },
+                "boolean": {
+                  "enabled": false,
+                  "onColor": "",
+                  "offColor": "",
+                  "fillOpacity": 0.15
+                }
+              }
+            },
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "line",
+                  "area",
+                  "bar",
+                  "scatter",
+                  "step"
+                ],
+                "default": "line",
+                "description": "How the pen is drawn. 'step' holds each value until the next sample (best for on-change and Boolean tags). Boolean tags default to 'step' when type is 'line'."
+              },
+              "interpolation": {
+                "type": "string",
+                "enum": [
+                  "linear",
+                  "spline",
+                  "stepAfter",
+                  "stepBefore",
+                  "stepCenter",
+                  "basis",
+                  "basisOpen",
+                  "cardinal",
+                  "cardinalOpen",
+                  "catmullRom",
+                  "catmullRomOpen",
+                  "monotoneX",
+                  "monotoneY",
+                  "natural"
+                ],
+                "default": "linear",
+                "visibleWhen": {
+                  "property": "type",
+                  "equals": [
+                    "line",
+                    "area"
+                  ]
+                },
+                "description": "Curve between samples for line/area pens (the Power Chart's curve types). linear = straight lines; spline = smooth, never overshoots (fast); stepAfter = hold each value until the next sample; stepBefore = show each value from the previous sample on; stepCenter = change half-way between samples; basis = B-spline (smoothest, does not pass through the samples); cardinal / catmullRom = smooth through every sample; monotoneX = smooth through every sample without overshoot; monotoneY = monotone in y; natural = natural cubic spline. The *Open variants leave out the first and last segment. With more samples than pixels the smooth curves are drawn as lines (they look the same)."
+              },
+              "breakLine": {
+                "type": "boolean",
+                "default": true,
+                "description": "Break the line where the historian returned bad-quality data. When false, bad points are skipped and neighbours are joined."
+              },
+              "width": {
+                "type": "number",
+                "default": 1.5,
+                "minimum": 0.5,
+                "maximum": 8,
+                "description": "Line width in px."
+              },
+              "dash": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "default": [],
+                "description": "Dash pattern in px, e.g. [6, 3]. Empty = solid."
+              },
+              "fillOpacity": {
+                "type": "number",
+                "default": 0.2,
+                "minimum": 0,
+                "maximum": 1,
+                "visibleWhen": {
+                  "property": "type",
+                  "equals": [
+                    "area",
+                    "bar"
+                  ]
+                },
+                "description": "Fill opacity for area and bar pens."
+              },
+              "radius": {
+                "type": "number",
+                "default": 3,
+                "minimum": 1,
+                "maximum": 10,
+                "visibleWhen": {
+                  "property": "type",
+                  "equals": [
+                    "scatter"
+                  ]
+                },
+                "description": "Point radius for scatter pens."
+              },
+              "states": {
+                "type": "object",
+                "additionalProperties": false,
+                "default": {
+                  "bad": {
+                    "style": "hatch",
+                    "color": ""
+                  },
+                  "outOfBounds": {
+                    "enabled": false,
+                    "source": "engineering",
+                    "low": null,
+                    "high": null,
+                    "color": "",
+                    "width": 0
+                  },
+                  "boolean": {
+                    "enabled": false,
+                    "onColor": "",
+                    "offColor": "",
+                    "fillOpacity": 0.15
+                  }
+                },
+                "description": "Per-state styles (Power Chart style): how the pen is drawn while its data is bad, outside its limits, or (Boolean pens) on or off.",
+                "properties": {
+                  "bad": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "default": {
+                      "style": "hatch",
+                      "color": ""
+                    },
+                    "description": "Bad-quality stretches (gaps in the history).",
+                    "properties": {
+                      "style": {
+                        "type": "string",
+                        "enum": [
+                          "hatch",
+                          "hold",
+                          "none"
+                        ],
+                        "default": "hatch",
+                        "description": "'hatch' shades the stretch with diagonal lines; 'hold' draws the last good value as a dashed line across it; 'none' only leaves the gap (see breakLine)."
+                      },
+                      "color": {
+                        "type": "string",
+                        "format": "color",
+                        "default": "",
+                        "description": "Colour of the hatching or the hold line. Empty = the pen colour."
+                      }
+                    }
+                  },
+                  "outOfBounds": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "default": {
+                      "enabled": false,
+                      "source": "engineering",
+                      "low": null,
+                      "high": null,
+                      "color": "",
+                      "width": 0
+                    },
+                    "description": "Parts of the line above the high limit or below the low limit.",
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Draw the parts outside the limits in another colour (and width)."
+                      },
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "engineering",
+                          "manual"
+                        ],
+                        "default": "engineering",
+                        "description": "'engineering' = the tag's Engineering Low / High (a low or high set below overrides that side); 'manual' = only low and high below."
+                      },
+                      "low": {
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null,
+                        "description": "Low limit. Empty = the tag's Engineering Low (source engineering) or no low limit (manual)."
+                      },
+                      "high": {
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null,
+                        "description": "High limit. Empty = the tag's Engineering High (source engineering) or no high limit (manual)."
+                      },
+                      "color": {
+                        "type": "string",
+                        "format": "color",
+                        "default": "",
+                        "description": "Line colour outside the limits. Empty = the theme's warning colour."
+                      },
+                      "width": {
+                        "type": "number",
+                        "default": 0,
+                        "minimum": 0,
+                        "maximum": 8,
+                        "description": "Line width outside the limits in px. Only a width above the pen's width is drawn; 0 or a narrower width = the pen's width."
+                      }
+                    }
+                  },
+                  "boolean": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "default": {
+                      "enabled": false,
+                      "onColor": "",
+                      "offColor": "",
+                      "fillOpacity": 0.15
+                    },
+                    "description": "Boolean pens (drawn as 0 / 1 steps): colour by state.",
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Colour the line by state and shade the periods where the value is on (true). Ignored for other pens."
+                      },
+                      "onColor": {
+                        "type": "string",
+                        "format": "color",
+                        "default": "",
+                        "description": "Line and shading colour while on. Empty = the pen colour."
+                      },
+                      "offColor": {
+                        "type": "string",
+                        "format": "color",
+                        "default": "",
+                        "description": "Line colour while off. Empty = the theme's muted text colour."
+                      },
+                      "fillOpacity": {
+                        "type": "number",
+                        "default": 0.15,
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Opacity of the shading under the 'on' periods. 0 = no shading."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "trendGroup": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": "default",
+      "maxLength": 64,
+      "description": "[S] Session trend list shown in addition to 'pens' (tags added with right-click 'Trend Tag' on Display Templates using the same trendGroup). Empty or null = ignore the session trend list."
+    },
+    "trendEdit": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {
+        "enabled": true,
+        "access": {
+          "roles": [],
+          "securityLevels": [],
+          "requireLogin": false
+        }
+      },
+      "description": "[S] Who may add or remove session trend list tags from this chart (tag browser 'Add selected', remove pen, 'Clear list'). Display Template 'Trend Tag' uses its own menu.trend rule. Enforced on the gateway.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "[S] Allow trend list changes from this chart."
+        },
+        "access": {
+          "type": "object",
+          "additionalProperties": false,
+          "default": {
+            "roles": [],
+            "securityLevels": [],
+            "requireLogin": false
+          },
+          "description": "[S] Who may change the trend list from this chart.",
+          "properties": {
+            "roles": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": [],
+              "description": "[S] Any one of these roles (exact names)."
+            },
+            "securityLevels": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": [],
+              "description": "[S] Any one of these security-level paths."
+            },
+            "requireLogin": {
+              "type": "boolean",
+              "default": false,
+              "description": "[S] Require a logged-in user."
+            }
+          }
+        }
+      }
+    },
+    "readScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {
+        "allowedRoots": [],
+        "allowRuntimePens": true
+      },
+      "description": "[S] Which tags this chart may read when pens are added at runtime (settings panel, tag browser, trend list changes from this chart). Enforced on the gateway for pens, live values and history. Pens configured in the Designer and tags trended from Display Templates are always allowed.",
+      "properties": {
+        "allowedRoots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "[S] Folders runtime pens must be inside, e.g. [default]Area1. Empty = tagBrowser.rootPath when the tag browser is enabled (all providers when that is empty, except providers the gateway administrator denies, [System] by default); with the tag browser off, only Designer pens and the session trend list."
+        },
+        "allowRuntimePens": {
+          "type": "boolean",
+          "default": true,
+          "description": "[S] Allow pens to be added at runtime at all."
+        }
+      }
+    },
+    "trendPens": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {
+        "nameMode": "auto",
+        "defaults": {
+          "axis": "",
+          "plot": 0,
+          "display": {
+            "type": "line",
+            "interpolation": "linear",
+            "breakLine": true,
+            "width": 1.5,
+            "dash": [],
+            "fillOpacity": 0.2,
+            "radius": 3,
+            "states": {
+              "bad": {
+                "style": "hatch",
+                "color": ""
+              },
+              "outOfBounds": {
+                "enabled": false,
+                "source": "engineering",
+                "low": null,
+                "high": null,
+                "color": "",
+                "width": 0
+              },
+              "boolean": {
+                "enabled": false,
+                "onColor": "",
+                "offColor": "",
+                "fillOpacity": 0.15
+              }
+            }
+          }
+        },
+        "overrides": []
+      },
+      "description": "How pens coming from the session trend list look.",
+      "properties": {
+        "nameMode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "leaf",
+            "full"
+          ],
+          "default": "auto",
+          "description": "auto = shortest unique end of the tag path (Pump1/Speed vs Pump2/Speed); leaf = tag name only; full = full path."
+        },
+        "defaults": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Axis/plot/display used for every trend pen without an override.",
+          "default": {
+            "axis": "",
+            "plot": 0,
+            "display": {
+              "type": "line",
+              "interpolation": "linear",
+              "breakLine": true,
+              "width": 1.5,
+              "dash": [],
+              "fillOpacity": 0.2,
+              "radius": 3,
+              "states": {
+                "bad": {
+                  "style": "hatch",
+                  "color": ""
+                },
+                "outOfBounds": {
+                  "enabled": false,
+                  "source": "engineering",
+                  "low": null,
+                  "high": null,
+                  "color": "",
+                  "width": 0
+                },
+                "boolean": {
+                  "enabled": false,
+                  "onColor": "",
+                  "offColor": "",
+                  "fillOpacity": 0.15
+                }
+              }
+            }
+          },
+          "properties": {
+            "axis": {
+              "type": "string",
+              "default": "",
+              "description": "Axis name; empty = automatic."
+            },
+            "plot": {
+              "type": "integer",
+              "default": 0,
+              "minimum": 0,
+              "maximum": 7
+            },
+            "display": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Same fields as pens[].display.",
+              "default": {
+                "type": "line",
+                "interpolation": "linear",
+                "breakLine": true,
+                "width": 1.5,
+                "dash": [],
+                "fillOpacity": 0.2,
+                "radius": 3,
+                "states": {
+                  "bad": {
+                    "style": "hatch",
+                    "color": ""
+                  },
+                  "outOfBounds": {
+                    "enabled": false,
+                    "source": "engineering",
+                    "low": null,
+                    "high": null,
+                    "color": "",
+                    "width": 0
+                  },
+                  "boolean": {
+                    "enabled": false,
+                    "onColor": "",
+                    "offColor": "",
+                    "fillOpacity": 0.15
+                  }
+                }
+              },
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "line",
+                    "area",
+                    "bar",
+                    "scatter",
+                    "step"
+                  ],
+                  "default": "line"
+                },
+                "interpolation": {
+                  "type": "string",
+                  "enum": [
+                    "linear",
+                    "spline",
+                    "stepAfter",
+                    "stepBefore",
+                    "stepCenter",
+                    "basis",
+                    "basisOpen",
+                    "cardinal",
+                    "cardinalOpen",
+                    "catmullRom",
+                    "catmullRomOpen",
+                    "monotoneX",
+                    "monotoneY",
+                    "natural"
+                  ],
+                  "default": "linear",
+                  "visibleWhen": {
+                    "property": "type",
+                    "equals": [
+                      "line",
+                      "area"
+                    ]
+                  }
+                },
+                "breakLine": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "width": {
+                  "type": "number",
+                  "default": 1.5,
+                  "minimum": 0.5,
+                  "maximum": 8
+                },
+                "dash": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "default": []
+                },
+                "fillOpacity": {
+                  "type": "number",
+                  "default": 0.2,
+                  "minimum": 0,
+                  "maximum": 1,
+                  "visibleWhen": {
+                    "property": "type",
+                    "equals": [
+                      "area",
+                      "bar"
+                    ]
+                  }
+                },
+                "radius": {
+                  "type": "number",
+                  "default": 3,
+                  "minimum": 1,
+                  "maximum": 10,
+                  "visibleWhen": {
+                    "property": "type",
+                    "equals": [
+                      "scatter"
+                    ]
+                  }
+                },
+                "states": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "default": {
+                    "bad": {
+                      "style": "hatch",
+                      "color": ""
+                    },
+                    "outOfBounds": {
+                      "enabled": false,
+                      "source": "engineering",
+                      "low": null,
+                      "high": null,
+                      "color": "",
+                      "width": 0
+                    },
+                    "boolean": {
+                      "enabled": false,
+                      "onColor": "",
+                      "offColor": "",
+                      "fillOpacity": 0.15
+                    }
+                  },
+                  "properties": {
+                    "bad": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "default": {
+                        "style": "hatch",
+                        "color": ""
+                      },
+                      "properties": {
+                        "style": {
+                          "type": "string",
+                          "enum": [
+                            "hatch",
+                            "hold",
+                            "none"
+                          ],
+                          "default": "hatch"
+                        },
+                        "color": {
+                          "type": "string",
+                          "format": "color",
+                          "default": ""
+                        }
+                      }
+                    },
+                    "outOfBounds": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "default": {
+                        "enabled": false,
+                        "source": "engineering",
+                        "low": null,
+                        "high": null,
+                        "color": "",
+                        "width": 0
+                      },
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean",
+                          "default": false
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "engineering",
+                            "manual"
+                          ],
+                          "default": "engineering"
+                        },
+                        "low": {
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "high": {
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "color": {
+                          "type": "string",
+                          "format": "color",
+                          "default": ""
+                        },
+                        "width": {
+                          "type": "number",
+                          "default": 0,
+                          "minimum": 0,
+                          "maximum": 8
+                        }
+                      }
+                    },
+                    "boolean": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "default": {
+                        "enabled": false,
+                        "onColor": "",
+                        "offColor": "",
+                        "fillOpacity": 0.15
+                      },
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean",
+                          "default": false
+                        },
+                        "onColor": {
+                          "type": "string",
+                          "format": "color",
+                          "default": ""
+                        },
+                        "offColor": {
+                          "type": "string",
+                          "format": "color",
+                          "default": ""
+                        },
+                        "fillOpacity": {
+                          "type": "number",
+                          "default": 0.15,
+                          "minimum": 0,
+                          "maximum": 1
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "overrides": {
+          "type": "array",
+          "default": [],
+          "description": "Written by the chart when a user restyles a trend pen at runtime: one entry per tag (matched on tagPath, case-insensitive). Safe to clear.",
+          "items": {
+            "type": "object",
+            "required": [
+              "tagPath"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "tagPath": {
+                "type": "string",
+                "default": "",
+                "description": "Tag this override applies to."
+              },
+              "name": {
+                "type": "string",
+                "default": ""
+              },
+              "color": {
+                "type": "string",
+                "format": "color",
+                "default": ""
+              },
+              "visible": {
+                "type": "boolean",
+                "default": true
+              },
+              "axis": {
+                "type": "string",
+                "default": ""
+              },
+              "plot": {
+                "type": "integer",
+                "default": 0,
+                "minimum": 0,
+                "maximum": 7
+              },
+              "units": {
+                "type": "string",
+                "default": ""
+              },
+              "format": {
+                "type": "string",
+                "default": ""
+              },
+              "display": {
+                "type": "object",
+                "additionalProperties": false,
+                "description": "Same fields as pens[].display.",
+                "default": {
+                  "type": "line",
+                  "interpolation": "linear",
+                  "breakLine": true,
+                  "width": 1.5,
+                  "dash": [],
+                  "fillOpacity": 0.2,
+                  "radius": 3,
+                  "states": {
+                    "bad": {
+                      "style": "hatch",
+                      "color": ""
+                    },
+                    "outOfBounds": {
+                      "enabled": false,
+                      "source": "engineering",
+                      "low": null,
+                      "high": null,
+                      "color": "",
+                      "width": 0
+                    },
+                    "boolean": {
+                      "enabled": false,
+                      "onColor": "",
+                      "offColor": "",
+                      "fillOpacity": 0.15
+                    }
+                  }
+                },
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "line",
+                      "area",
+                      "bar",
+                      "scatter",
+                      "step"
+                    ],
+                    "default": "line"
+                  },
+                  "interpolation": {
+                    "type": "string",
+                    "enum": [
+                      "linear",
+                      "spline",
+                      "stepAfter",
+                      "stepBefore",
+                      "stepCenter",
+                      "basis",
+                      "basisOpen",
+                      "cardinal",
+                      "cardinalOpen",
+                      "catmullRom",
+                      "catmullRomOpen",
+                      "monotoneX",
+                      "monotoneY",
+                      "natural"
+                    ],
+                    "default": "linear"
+                  },
+                  "breakLine": {
+                    "type": "boolean",
+                    "default": true
+                  },
+                  "width": {
+                    "type": "number",
+                    "default": 1.5,
+                    "minimum": 0.5,
+                    "maximum": 8
+                  },
+                  "dash": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "default": []
+                  },
+                  "fillOpacity": {
+                    "type": "number",
+                    "default": 0.2,
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "radius": {
+                    "type": "number",
+                    "default": 3,
+                    "minimum": 1,
+                    "maximum": 10
+                  },
+                  "states": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "default": {
+                      "bad": {
+                        "style": "hatch",
+                        "color": ""
+                      },
+                      "outOfBounds": {
+                        "enabled": false,
+                        "source": "engineering",
+                        "low": null,
+                        "high": null,
+                        "color": "",
+                        "width": 0
+                      },
+                      "boolean": {
+                        "enabled": false,
+                        "onColor": "",
+                        "offColor": "",
+                        "fillOpacity": 0.15
+                      }
+                    },
+                    "properties": {
+                      "bad": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "default": {
+                          "style": "hatch",
+                          "color": ""
+                        },
+                        "properties": {
+                          "style": {
+                            "type": "string",
+                            "enum": [
+                              "hatch",
+                              "hold",
+                              "none"
+                            ],
+                            "default": "hatch"
+                          },
+                          "color": {
+                            "type": "string",
+                            "format": "color",
+                            "default": ""
+                          }
+                        }
+                      },
+                      "outOfBounds": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "default": {
+                          "enabled": false,
+                          "source": "engineering",
+                          "low": null,
+                          "high": null,
+                          "color": "",
+                          "width": 0
+                        },
+                        "properties": {
+                          "enabled": {
+                            "type": "boolean",
+                            "default": false
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "engineering",
+                              "manual"
+                            ],
+                            "default": "engineering"
+                          },
+                          "low": {
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null
+                          },
+                          "high": {
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null
+                          },
+                          "color": {
+                            "type": "string",
+                            "format": "color",
+                            "default": ""
+                          },
+                          "width": {
+                            "type": "number",
+                            "default": 0,
+                            "minimum": 0,
+                            "maximum": 8
+                          }
+                        }
+                      },
+                      "boolean": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "default": {
+                          "enabled": false,
+                          "onColor": "",
+                          "offColor": "",
+                          "fillOpacity": 0.15
+                        },
+                        "properties": {
+                          "enabled": {
+                            "type": "boolean",
+                            "default": false
+                          },
+                          "onColor": {
+                            "type": "string",
+                            "format": "color",
+                            "default": ""
+                          },
+                          "offColor": {
+                            "type": "string",
+                            "format": "color",
+                            "default": ""
+                          },
+                          "fillOpacity": {
+                            "type": "number",
+                            "default": 0.15,
+                            "minimum": 0,
+                            "maximum": 1
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "timeRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {
+        "mode": "realtime",
+        "realtime": {
+          "value": 8,
+          "unit": "hours"
+        },
+        "refreshRate": 1000,
+        "historical": {
+          "startDate": null,
+          "endDate": null
+        },
+        "presets": [
+          {
+            "value": 15,
+            "unit": "minutes",
+            "label": ""
+          },
+          {
+            "value": 1,
+            "unit": "hours",
+            "label": ""
+          },
+          {
+            "value": 8,
+            "unit": "hours",
+            "label": ""
+          },
+          {
+            "value": 24,
+            "unit": "hours",
+            "label": ""
+          },
+          {
+            "value": 7,
+            "unit": "days",
+            "label": ""
+          }
+        ]
+      },
+      "description": "Time window. Changed at runtime by the date range button (written back here).",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "realtime",
+            "historical"
+          ],
+          "default": "realtime",
+          "description": "realtime = rolling window ending now, refreshed automatically. historical = fixed start/end, no automatic refresh."
+        },
+        "realtime": {
+          "type": "object",
+          "additionalProperties": false,
+          "visibleWhen": {
+            "property": "mode",
+            "equals": [
+              "realtime"
+            ]
+          },
+          "default": {
+            "value": 8,
+            "unit": "hours"
+          },
+          "properties": {
+            "value": {
+              "type": "number",
+              "default": 8,
+              "minimum": 1,
+              "description": "How many units back from now."
+            },
+            "unit": {
+              "type": "string",
+              "enum": [
+                "seconds",
+                "minutes",
+                "hours",
+                "days",
+                "weeks",
+                "months",
+                "years"
+              ],
+              "default": "hours",
+              "description": "Months and years are calendar months/years in the chart time zone. The gateway limits the total span (400 days aggregated, 31 days raw by default)."
+            }
+          }
+        },
+        "refreshRate": {
+          "type": "integer",
+          "default": 1000,
+          "minimum": 0,
+          "maximum": 3600000,
+          "visibleWhen": {
+            "property": "mode",
+            "equals": [
+              "realtime"
+            ]
+          },
+          "description": "Realtime refresh period in ms. 0 = no automatic refresh. Values between 1 and 249 are raised to 250. Only new samples are fetched on each refresh."
+        },
+        "historical": {
+          "type": "object",
+          "additionalProperties": false,
+          "visibleWhen": {
+            "property": "mode",
+            "equals": [
+              "historical"
+            ]
+          },
+          "default": {
+            "startDate": null,
+            "endDate": null
+          },
+          "properties": {
+            "startDate": {
+              "type": [
+                "date",
+                "null"
+              ],
+              "default": null,
+              "description": "Start. Bindings may also supply epoch ms or an ISO-8601 string. Null = end minus 8 hours."
+            },
+            "endDate": {
+              "type": [
+                "date",
+                "null"
+              ],
+              "default": null,
+              "description": "End. Bindings may also supply epoch ms or an ISO-8601 string. Null = now at load time. Ends in the future are clamped to now."
+            }
+          }
+        },
+        "presets": {
+          "type": "array",
+          "description": "Quick picks in the date range dialog's Realtime tab.",
+          "default": [
+            {
+              "value": 15,
+              "unit": "minutes",
+              "label": ""
+            },
+            {
+              "value": 1,
+              "unit": "hours",
+              "label": ""
+            },
+            {
+              "value": 8,
+              "unit": "hours",
+              "label": ""
+            },
+            {
+              "value": 24,
+              "unit": "hours",
+              "label": ""
+            },
+            {
+              "value": 7,
+              "unit": "days",
+              "label": ""
+            }
+          ],
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "value",
+              "unit"
+            ],
+            "properties": {
+              "value": {
+                "type": "number",
+                "default": 1,
+                "minimum": 1
+              },
+              "unit": {
+                "type": "string",
+                "enum": [
+                  "seconds",
+                  "minutes",
+                  "hours",
+                  "days",
+                  "weeks",
+                  "months",
+                  "years"
+                ],
+                "default": "hours"
+              },
+              "label": {
+                "type": "string",
+                "default": "",
+                "description": "Optional text; empty = '15 min' style label."
+              }
+            }
+          }
+        }
+      }
+    },
+    "query": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {
+        "mode": "auto",
+        "aggregation": "MinMax",
+        "pointCount": 0,
+        "autoRawBelowBucketMs": 2000,
+        "maxPointsPerPen": 100000,
+        "onTooManyPoints": "message",
+        "includeAnchor": true,
+        "chunking": {
+          "enabled": true,
+          "rawChunk": "auto"
+        }
+      },
+      "description": "How history is queried.",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "aggregated",
+            "raw"
+          ],
+          "default": "auto",
+          "description": "aggregated = fixed number of buckets per pen; raw = every stored sample (can be large); auto = aggregated, switching to raw when zoomed in so far that a bucket is shorter than autoRawBelowBucketMs (never while an enabled pen, or query.aggregation, uses a statistic aggregation such as Count or DurationOn)."
+        },
+        "aggregation": {
+          "type": "string",
+          "enum": [
+            "LastValue",
+            "SimpleAverage",
+            "Average",
+            "Minimum",
+            "Maximum",
+            "MinMax",
+            "Range",
+            "Count",
+            "Sum",
+            "StdDev",
+            "Variance",
+            "DurationOn",
+            "DurationOff",
+            "CountOn",
+            "CountOff",
+            "PctGood",
+            "PctBad"
+          ],
+          "default": "MinMax",
+          "description": "Default aggregation for aggregated queries. MinMax (default) keeps short spikes visible (2 points per bucket). LastValue suits slow signals. Average is time-weighted. Pens can override it."
+        },
+        "pointCount": {
+          "type": "integer",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 5000,
+          "description": "Buckets per pen for aggregated queries. 0 = automatic (plot width in pixels, 100-2000). Values 1-9 are raised to 10."
+        },
+        "autoRawBelowBucketMs": {
+          "type": "integer",
+          "default": 2000,
+          "minimum": 0,
+          "maximum": 3600000,
+          "visibleWhen": {
+            "property": "mode",
+            "equals": [
+              "auto"
+            ]
+          },
+          "description": "In auto mode, use raw data when the bucket would be shorter than this. 0 = never switch to raw."
+        },
+        "maxPointsPerPen": {
+          "type": "integer",
+          "default": 100000,
+          "minimum": 1000,
+          "maximum": 2000000,
+          "description": "Client-side cap for raw points per pen. The gateway has its own cap (the smaller one wins)."
+        },
+        "onTooManyPoints": {
+          "type": "string",
+          "enum": [
+            "message",
+            "aggregate"
+          ],
+          "default": "message",
+          "description": "message = show a clear 'too many points' message on that pen (iFix-like); aggregate = automatically fall back to aggregated data and show a small notice."
+        },
+        "includeAnchor": {
+          "type": "boolean",
+          "default": true,
+          "description": "Fetch the last value before the window start so lines start at the left edge."
+        },
+        "chunking": {
+          "type": "object",
+          "additionalProperties": false,
+          "default": {
+            "enabled": true,
+            "rawChunk": "auto"
+          },
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Load large raw ranges in time chunks (newest first) with a progress bar and Cancel."
+            },
+            "rawChunk": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "1h",
+                "6h",
+                "1d"
+              ],
+              "default": "auto",
+              "description": "Chunk size for raw loads. auto = smallest of 1h/6h/1d giving at most 50 chunks."
+            }
+          }
+        }
+      }
+    },
+    "axes": {
+      "type": "array",
+      "default": [],
+      "description": "Named Y axes. Pens refer to them by name. Pens with an empty axis get automatic axes.",
+      "items": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "default": {
+          "name": "Axis 1",
+          "position": "left",
+          "visible": true,
+          "label": {
+            "text": "",
+            "visible": true
+          },
+          "color": "",
+          "format": "",
+          "scale": "linear",
+          "width": 0,
+          "range": {
+            "mode": "auto",
+            "min": null,
+            "max": null,
+            "includeZero": false,
+            "padding": 0.05
+          },
+          "grid": {
+            "visible": true,
+            "color": "",
+            "opacity": 0.5,
+            "dash": []
+          }
+        },
+        "properties": {
+          "name": {
+            "type": "string",
+            "default": "Axis 1",
+            "description": "Unique axis name referenced by pens[].axis."
+          },
+          "position": {
+            "type": "string",
+            "enum": [
+              "left",
+              "right"
+            ],
+            "default": "left"
+          },
+          "visible": {
+            "type": "boolean",
+            "default": true,
+            "description": "Hide the axis line/labels (pens still scale against it)."
+          },
+          "label": {
+            "type": "object",
+            "additionalProperties": false,
+            "default": {
+              "text": "",
+              "visible": true
+            },
+            "properties": {
+              "text": {
+                "type": "string",
+                "default": "",
+                "description": "Axis title. Empty = the units of its pens."
+              },
+              "visible": {
+                "type": "boolean",
+                "default": true
+              }
+            }
+          },
+          "color": {
+            "type": "string",
+            "format": "color",
+            "default": "",
+            "description": "Axis line, tick and label colour. Empty = theme."
+          },
+          "format": {
+            "type": "string",
+            "default": "",
+            "description": "Tick number format ('#,##0.0' or '0,0.##'). Empty = automatic."
+          },
+          "scale": {
+            "type": "string",
+            "enum": [
+              "linear",
+              "log"
+            ],
+            "default": "linear",
+            "description": "Log scale ignores values <= 0; manual and engineering ranges apply when their sides are above 0."
+          },
+          "width": {
+            "type": "integer",
+            "default": 0,
+            "minimum": 0,
+            "maximum": 400,
+            "description": "Axis width in px. 0 = automatic (fits the widest label)."
+          },
+          "range": {
+            "type": "object",
+            "additionalProperties": false,
+            "default": {
+              "mode": "auto",
+              "min": null,
+              "max": null,
+              "includeZero": false,
+              "padding": 0.05
+            },
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "manual",
+                  "engineering"
+                ],
+                "default": "auto",
+                "description": "auto = fit the visible data; manual = min/max below (a null side stays automatic); engineering = EngLow/EngHigh of the first pen on the axis."
+              },
+              "min": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null,
+                "visibleWhen": {
+                  "property": "mode",
+                  "equals": [
+                    "manual"
+                  ]
+                }
+              },
+              "max": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null,
+                "visibleWhen": {
+                  "property": "mode",
+                  "equals": [
+                    "manual"
+                  ]
+                }
+              },
+              "includeZero": {
+                "type": "boolean",
+                "default": false,
+                "description": "Auto range always includes 0."
+              },
+              "padding": {
+                "type": "number",
+                "default": 0.05,
+                "minimum": 0,
+                "maximum": 0.5,
+                "description": "Extra space above/below auto-fitted data (fraction of the range)."
+              }
+            }
+          },
+          "grid": {
+            "type": "object",
+            "additionalProperties": false,
+            "default": {
+              "visible": true,
+              "color": "",
+              "opacity": 0.5,
+              "dash": []
+            },
+            "properties": {
+              "visible": {
+                "type": "boolean",
+                "default": true,
+                "description": "Grid lines are drawn only for the innermost axis on each side."
+              },
+              "color": {
+                "type": "string",
+                "format": "color",
+                "default": ""
+              },
+              "opacity": {
+                "type": "number",
+                "default": 0.5,
+                "minimum": 0,
+                "maximum": 1
+              },
+              "dash": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "default": []
+              }
+            }
+          }
+        }
+      }
+    },
+    "plots": {
+      "type": "array",
+      "default": [],
+      "description": "Stacked plots sharing one time axis. Empty = a single plot. Pens choose a plot with pens[].plot.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "default": {
+          "relativeWeight": 1,
+          "background": "",
+          "markers": []
+        },
+        "properties": {
+          "relativeWeight": {
+            "type": "number",
+            "default": 1,
+            "minimum": 0.1,
+            "maximum": 10,
+            "description": "Height ratio between plots."
+          },
+          "background": {
+            "type": "string",
+            "format": "color",
+            "default": "",
+            "description": "Plot area background. Empty = transparent (theme)."
+          },
+          "markers": {
+            "type": "array",
+            "default": [],
+            "description": "Horizontal reference lines and bands.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "line",
+                    "band"
+                  ],
+                  "default": "line"
+                },
+                "axis": {
+                  "type": "string",
+                  "default": "",
+                  "description": "Axis name the value refers to. Empty = first axis of the plot."
+                },
+                "value": {
+                  "type": "number",
+                  "default": 0,
+                  "visibleWhen": {
+                    "property": "type",
+                    "equals": [
+                      "line"
+                    ]
+                  }
+                },
+                "min": {
+                  "type": "number",
+                  "default": 0,
+                  "visibleWhen": {
+                    "property": "type",
+                    "equals": [
+                      "band"
+                    ]
+                  }
+                },
+                "max": {
+                  "type": "number",
+                  "default": 0,
+                  "visibleWhen": {
+                    "property": "type",
+                    "equals": [
+                      "band"
+                    ]
+                  }
+                },
+                "color": {
+                  "type": "string",
+                  "format": "color",
+                  "default": ""
+                },
+                "opacity": {
+                  "type": "number",
+                  "default": 0.6,
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "width": {
+                  "type": "number",
+                  "default": 1
+                },
+                "dash": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "default": [
+                    4,
+                    4
+                  ]
+                },
+                "label": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "default": {
+                    "text": "",
+                    "position": "right"
+                  },
+                  "properties": {
+                    "text": {
+                      "type": "string",
+                      "default": ""
+                    },
+                    "position": {
+                      "type": "string",
+                      "enum": [
+                        "left",
+                        "right"
+                      ],
+                      "default": "right"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "timeAxis": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {
+        "visible": true,
+        "format": "auto",
+        "timeZone": "session",
+        "grid": {
+          "visible": true,
+          "color": "",
+          "opacity": 0.5,
+          "dash": []
+        }
+      },
+      "properties": {
+        "visible": {
+          "type": "boolean",
+          "default": true
+        },
+        "format": {
+          "type": "string",
+          "default": "auto",
+          "description": "'auto' = labels adapt to the zoom (seconds to years, date shown when it changes). Or a pattern with tokens YYYY YY MMMM MMM MM M DD D HH H hh h mm ss SSS A ZZ, e.g. 'MM/DD HH:mm'."
+        },
+        "timeZone": {
+          "type": "string",
+          "default": "session",
+          "description": "'session' = session.props.timeZoneId; 'browser' = this device; 'gateway' = the gateway's zone; or an IANA name such as 'America/Chicago'."
+        },
+        "grid": {
+          "type": "object",
+          "additionalProperties": false,
+          "default": {
+            "visible": true,
+            "color": "",
+            "opacity": 0.5,
+            "dash": []
+          },
+          "properties": {
+            "visible": {
+              "type": "boolean",
+              "default": true
+            },
+            "color": {
+              "type": "string",
+              "format": "color",
+              "default": ""
+            },
+            "opacity": {
+              "type": "number",
+              "default": 0.5
+            },
+            "dash": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "default": []
+            }
+          }
+        }
+      }
+    },
+    "rangeSelector": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {
+        "visible": false,
+        "height": 64,
+        "pens": "visible",
+        "narrowVisible": false
+      },
+      "description": "Overview strip under the plots (the Power Chart's range selector): the whole time range of the chart at low resolution, with the visible part as a window you drag, resize or redraw to move the plots. Keyboard and touch work too. Off by default.",
+      "properties": {
+        "visible": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show the overview strip. Operators can hide it for the session in the More menu."
+        },
+        "height": {
+          "type": "integer",
+          "default": 64,
+          "minimum": 40,
+          "maximum": 200,
+          "description": "Height of the strip in px, time labels included."
+        },
+        "pens": {
+          "type": "string",
+          "enum": [
+            "visible",
+            "all"
+          ],
+          "default": "visible",
+          "description": "Pens drawn in the strip: the visible ones, or all of them (hidden ones too). Each pen is scaled to its own minimum and maximum over the range."
+        },
+        "narrowVisible": {
+          "type": "boolean",
+          "default": false,
+          "description": "Also show the strip in the narrow layout (chart narrower than toolbar.responsiveWidth). Very small charts never show it."
+        }
+      }
+    },
+    "interaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {
+        "mode": "xTrace",
+        "fullscreen": false,
+        "cursorSyncGroup": "",
+        "keyboard": true,
+        "panAndZoom": {
+          "freeRange": true,
+          "wheelZoom": true
+        },
+        "xTrace": {
+          "values": [],
+          "maxTraces": 4,
+          "infoBox": {
+            "visible": true,
+            "timeVisible": true
+          },
+          "line": {
+            "color": "",
+            "width": 1,
+            "dash": [
+              4,
+              2
+            ]
+          }
+        },
+        "rangeBrush": {
+          "values": [],
+          "max": 3,
+          "exactStats": true,
+          "active": {
+            "color": "",
+            "opacity": 0.25
+          },
+          "inactive": {
+            "color": "",
+            "opacity": 0.12
+          },
+          "controlLimits": {
+            "method": "stdDev",
+            "sigma": 3
+          }
+        }
+      },
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "xTrace",
+            "pan",
+            "zoom",
+            "rangeBrush",
+            "annotate"
+          ],
+          "default": "xTrace",
+          "description": "Current interaction mode (the toolbar writes it). xTrace = hover/pin a value cursor; pan = drag to move, wheel/pinch to zoom; zoom = drag a box to zoom in; rangeBrush = drag to select a range and see its statistics; annotate = add notes (needs annotations.enabled)."
+        },
+        "fullscreen": {
+          "type": "boolean",
+          "default": false,
+          "description": "Fullscreen presentation. Written by the fullscreen button."
+        },
+        "cursorSyncGroup": {
+          "type": "string",
+          "default": "",
+          "description": "Charts on the same page with the same non-empty group share the hover cursor time."
+        },
+        "keyboard": {
+          "type": "boolean",
+          "default": true,
+          "description": "Arrow/+/-/Home keys pan and zoom when the plot has focus."
+        },
+        "panAndZoom": {
+          "type": "object",
+          "additionalProperties": false,
+          "default": {
+            "freeRange": true,
+            "wheelZoom": true
+          },
+          "properties": {
+            "freeRange": {
+              "type": "boolean",
+              "default": true,
+              "description": "When true, panning/zooming re-queries history for the visible window (more detail when zoomed in, older data when panning back). When false, pan/zoom only magnifies the data already loaded."
+            },
+            "wheelZoom": {
+              "type": "boolean",
+              "default": true,
+              "description": "Mouse wheel zooms around the pointer in pan and zoom modes."
+            }
+          }
+        },
+        "xTrace": {
+          "type": "object",
+          "additionalProperties": false,
+          "default": {
+            "values": [],
+            "maxTraces": 4,
+            "infoBox": {
+              "visible": true,
+              "timeVisible": true
+            },
+            "line": {
+              "color": "",
+              "width": 1,
+              "dash": [
+                4,
+                2
+              ]
+            }
+          },
+          "properties": {
+            "values": {
+              "type": "array",
+              "default": [],
+              "description": "Pinned X-Trace cursors (written by the chart). Each item: { time: epoch ms } for a fixed time, or { fromEndMs: n } to stay n ms before the live edge.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "time": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "fromEndMs": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "default": null
+                  }
+                }
+              }
+            },
+            "maxTraces": {
+              "type": "integer",
+              "default": 4,
+              "minimum": 0,
+              "maximum": 8,
+              "description": "How many cursors can be pinned (click in X-Trace mode). 0 = hover only."
+            },
+            "infoBox": {
+              "type": "object",
+              "additionalProperties": false,
+              "default": {
+                "visible": true,
+                "timeVisible": true
+              },
+              "properties": {
+                "visible": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "timeVisible": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Show the time row in the info box."
+                }
+              }
+            },
+            "line": {
+              "type": "object",
+              "additionalProperties": false,
+              "default": {
+                "color": "",
+                "width": 1,
+                "dash": [
+                  4,
+                  2
+                ]
+              },
+              "properties": {
+                "color": {
+                  "type": "string",
+                  "format": "color",
+                  "default": ""
+                },
+                "width": {
+                  "type": "number",
+                  "default": 1
+                },
+                "dash": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "default": [
+                    4,
+                    2
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "rangeBrush": {
+          "type": "object",
+          "additionalProperties": false,
+          "default": {
+            "values": [],
+            "max": 3,
+            "exactStats": true,
+            "active": {
+              "color": "",
+              "opacity": 0.25
+            },
+            "inactive": {
+              "color": "",
+              "opacity": 0.12
+            },
+            "controlLimits": {
+              "method": "stdDev",
+              "sigma": 3
+            }
+          },
+          "properties": {
+            "values": {
+              "type": "array",
+              "default": [],
+              "description": "Range brushes (written by the chart): { id, start, end, plot } with epoch ms.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "start": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "end": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "plot": {
+                    "type": "integer",
+                    "default": 0
+                  }
+                }
+              }
+            },
+            "max": {
+              "type": "integer",
+              "default": 3,
+              "minimum": 1,
+              "maximum": 8
+            },
+            "exactStats": {
+              "type": "boolean",
+              "default": true,
+              "description": "When the chart holds aggregated data, fetch raw samples for the brushed range so the statistics are exact (falls back to aggregated if too many points)."
+            },
+            "active": {
+              "type": "object",
+              "additionalProperties": false,
+              "default": {
+                "color": "",
+                "opacity": 0.25
+              },
+              "properties": {
+                "color": {
+                  "type": "string",
+                  "format": "color",
+                  "default": ""
+                },
+                "opacity": {
+                  "type": "number",
+                  "default": 0.25
+                }
+              }
+            },
+            "inactive": {
+              "type": "object",
+              "additionalProperties": false,
+              "default": {
+                "color": "",
+                "opacity": 0.12
+              },
+              "properties": {
+                "color": {
+                  "type": "string",
+                  "format": "color",
+                  "default": ""
+                },
+                "opacity": {
+                  "type": "number",
+                  "default": 0.12
+                }
+              }
+            },
+            "controlLimits": {
+              "type": "object",
+              "additionalProperties": false,
+              "default": {
+                "method": "stdDev",
+                "sigma": 3
+              },
+              "properties": {
+                "method": {
+                  "type": "string",
+                  "enum": [
+                    "stdDev",
+                    "movingRange"
+                  ],
+                  "default": "stdDev",
+                  "description": "stdDev: UCL/LCL = mean +/- sigma x standard deviation of the samples. movingRange: individuals-chart limits, mean +/- sigma x (average moving range / 1.128)."
+                },
+                "sigma": {
+                  "type": "number",
+                  "default": 3,
+                  "minimum": 0.5,
+                  "maximum": 6
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "penTable": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {
+        "visible": true,
+        "collapsed": false,
+        "position": "bottom",
+        "size": 30,
+        "sizeUnit": "%",
+        "columns": {
+          "current": true,
+          "minimum": true,
+          "maximum": true,
+          "average": true,
+          "xTrace": true,
+          "axis": false,
+          "plot": false,
+          "units": true,
+          "status": true
+        },
+        "rangeColumns": {
+          "first": true,
+          "last": true,
+          "delta": true,
+          "minimum": true,
+          "maximum": true,
+          "average": true,
+          "median": true,
+          "standardDeviation": true,
+          "sum": true,
+          "lcl": true,
+          "ucl": true,
+          "count": false
+        },
+        "allowHide": true,
+        "allowColorChange": true,
+        "allowEdit": true,
+        "allowRemove": true,
+        "confirmRemove": true,
+        "style": {
+          "classes": ""
+        }
+      },
+      "description": "Pen table (legend) under or beside the plot.",
+      "properties": {
+        "visible": {
+          "type": "boolean",
+          "default": true
+        },
+        "collapsed": {
+          "type": "boolean",
+          "default": false,
+          "description": "Start collapsed (header row only). Users can expand it."
+        },
+        "position": {
+          "type": "string",
+          "enum": [
+            "bottom",
+            "right"
+          ],
+          "default": "bottom"
+        },
+        "size": {
+          "type": "integer",
+          "default": 30,
+          "minimum": 1,
+          "maximum": 2000,
+          "description": "Max height (bottom) or width (right), in sizeUnit."
+        },
+        "sizeUnit": {
+          "type": "string",
+          "enum": [
+            "%",
+            "px"
+          ],
+          "default": "%",
+          "description": "Unit of size: percent of the component, or pixels."
+        },
+        "columns": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Columns shown. Users can change them in Settings > Columns.",
+          "default": {
+            "current": true,
+            "minimum": true,
+            "maximum": true,
+            "average": true,
+            "xTrace": true,
+            "axis": false,
+            "plot": false,
+            "units": true,
+            "status": true
+          },
+          "properties": {
+            "current": {
+              "type": "boolean",
+              "default": true,
+              "description": "Live value (realtime) or value at the right edge (historical/paused)."
+            },
+            "minimum": {
+              "type": "boolean",
+              "default": true
+            },
+            "maximum": {
+              "type": "boolean",
+              "default": true
+            },
+            "average": {
+              "type": "boolean",
+              "default": true,
+              "description": "Time-weighted average over the visible window."
+            },
+            "xTrace": {
+              "type": "boolean",
+              "default": true,
+              "description": "Value at the hovered or first pinned X-Trace cursor."
+            },
+            "axis": {
+              "type": "boolean",
+              "default": false
+            },
+            "plot": {
+              "type": "boolean",
+              "default": false
+            },
+            "units": {
+              "type": "boolean",
+              "default": true
+            },
+            "status": {
+              "type": "boolean",
+              "default": true,
+              "description": "Quality / error indicator."
+            }
+          }
+        },
+        "rangeColumns": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Columns shown while a range brush is active.",
+          "default": {
+            "first": true,
+            "last": true,
+            "delta": true,
+            "minimum": true,
+            "maximum": true,
+            "average": true,
+            "median": true,
+            "standardDeviation": true,
+            "sum": true,
+            "lcl": true,
+            "ucl": true,
+            "count": false
+          },
+          "properties": {
+            "first": {
+              "type": "boolean",
+              "default": true
+            },
+            "last": {
+              "type": "boolean",
+              "default": true
+            },
+            "delta": {
+              "type": "boolean",
+              "default": true
+            },
+            "minimum": {
+              "type": "boolean",
+              "default": true
+            },
+            "maximum": {
+              "type": "boolean",
+              "default": true
+            },
+            "average": {
+              "type": "boolean",
+              "default": true
+            },
+            "median": {
+              "type": "boolean",
+              "default": true
+            },
+            "standardDeviation": {
+              "type": "boolean",
+              "default": true
+            },
+            "sum": {
+              "type": "boolean",
+              "default": true
+            },
+            "lcl": {
+              "type": "boolean",
+              "default": true
+            },
+            "ucl": {
+              "type": "boolean",
+              "default": true
+            },
+            "count": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        },
+        "allowHide": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the coloured show/hide checkbox per pen."
+        },
+        "allowColorChange": {
+          "type": "boolean",
+          "default": true,
+          "description": "Clicking the colour swatch opens the colour picker."
+        },
+        "allowEdit": {
+          "type": "boolean",
+          "default": true,
+          "description": "Pencil icon opens the pen in Settings."
+        },
+        "allowRemove": {
+          "type": "boolean",
+          "default": true,
+          "description": "Trash icon removes the pen (trend pens: from the session trend list, needs trendEdit)."
+        },
+        "confirmRemove": {
+          "type": "boolean",
+          "default": true,
+          "description": "Ask before removing a pen."
+        },
+        "style": {
+          "$ref": "urn:ignition-schema:schemas/style-properties.schema.json",
+          "default": {
+            "classes": ""
+          }
+        }
+      }
+    },
+    "toolbar": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {
+        "visible": true,
+        "responsiveWidth": 640,
+        "buttons": {
+          "dateRange": true,
+          "tagBrowser": true,
+          "xTrace": true,
+          "pan": true,
+          "zoom": true,
+          "rangeBrush": true,
+          "annotate": true,
+          "refresh": true,
+          "resetZoom": true,
+          "settings": true,
+          "export": true,
+          "fullscreen": true,
+          "refreshRate": false
+        },
+        "style": {
+          "classes": ""
+        }
+      },
+      "properties": {
+        "visible": {
+          "type": "boolean",
+          "default": true
+        },
+        "responsiveWidth": {
+          "type": "integer",
+          "default": 640,
+          "minimum": 0,
+          "maximum": 4000,
+          "description": "Below this component width (px) secondary buttons move into a 'More' menu and panels open full-size."
+        },
+        "buttons": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Toolbar items. Hidden items are also removed from the More menu.",
+          "default": {
+            "dateRange": true,
+            "tagBrowser": true,
+            "xTrace": true,
+            "pan": true,
+            "zoom": true,
+            "rangeBrush": true,
+            "annotate": true,
+            "refresh": true,
+            "resetZoom": true,
+            "settings": true,
+            "export": true,
+            "fullscreen": true,
+            "refreshRate": false
+          },
+          "properties": {
+            "dateRange": {
+              "type": "boolean",
+              "default": true
+            },
+            "tagBrowser": {
+              "type": "boolean",
+              "default": true,
+              "description": "Also needs tagBrowser.enabled."
+            },
+            "xTrace": {
+              "type": "boolean",
+              "default": true
+            },
+            "pan": {
+              "type": "boolean",
+              "default": true
+            },
+            "zoom": {
+              "type": "boolean",
+              "default": true
+            },
+            "rangeBrush": {
+              "type": "boolean",
+              "default": true
+            },
+            "annotate": {
+              "type": "boolean",
+              "default": true,
+              "description": "Also needs annotations.enabled."
+            },
+            "refresh": {
+              "type": "boolean",
+              "default": true
+            },
+            "resetZoom": {
+              "type": "boolean",
+              "default": true
+            },
+            "settings": {
+              "type": "boolean",
+              "default": true,
+              "description": "Also needs settingsPanel.enabled."
+            },
+            "export": {
+              "type": "boolean",
+              "default": true
+            },
+            "fullscreen": {
+              "type": "boolean",
+              "default": true
+            },
+            "refreshRate": {
+              "type": "boolean",
+              "default": false,
+              "description": "Refresh-rate field (in the More menu)."
+            }
+          }
+        },
+        "style": {
+          "$ref": "urn:ignition-schema:schemas/style-properties.schema.json",
+          "default": {
+            "classes": ""
+          }
+        }
+      }
+    },
+    "settingsPanel": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {
+        "enabled": true,
+        "tabs": {
+          "pens": true,
+          "axes": true,
+          "plots": true,
+          "columns": true
+        },
+        "allowAddPen": true,
+        "allowEditTagPath": true
+      },
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Allow the runtime settings panel. Edits are written to this component's props."
+        },
+        "tabs": {
+          "type": "object",
+          "additionalProperties": false,
+          "default": {
+            "pens": true,
+            "axes": true,
+            "plots": true,
+            "columns": true
+          },
+          "properties": {
+            "pens": {
+              "type": "boolean",
+              "default": true
+            },
+            "axes": {
+              "type": "boolean",
+              "default": true
+            },
+            "plots": {
+              "type": "boolean",
+              "default": true
+            },
+            "columns": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        },
+        "allowAddPen": {
+          "type": "boolean",
+          "default": true,
+          "description": "'Add pen' in the Pens tab (types a tag path; the tag browser is the friendlier way). Runtime pens must be inside readScope."
+        },
+        "allowEditTagPath": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "tagBrowser": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {
+        "enabled": true,
+        "rootPath": "",
+        "access": {
+          "roles": [],
+          "securityLevels": [],
+          "requireLogin": false
+        },
+        "addTo": "auto",
+        "openOnStart": false,
+        "width": 300
+      },
+      "description": "In-chart tag browser (Power Chart style). Browsing runs on the gateway with the logged-in user's permissions.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "[S] Allow the tag browser panel (on by default, like the Power Chart). Enforced on the gateway. Turning it off (without readScope.allowedRoots) also stops runtime pens."
+        },
+        "rootPath": {
+          "type": "string",
+          "default": "",
+          "description": "[S] Browsing (and, by default, runtime pens) is limited to this folder, e.g. [default]Area1. Empty = all tag providers except those the gateway administrator denies ([System] by default). Enforced on the gateway."
+        },
+        "access": {
+          "type": "object",
+          "additionalProperties": false,
+          "default": {
+            "roles": [],
+            "securityLevels": [],
+            "requireLogin": false
+          },
+          "description": "[S] Who may browse.",
+          "properties": {
+            "roles": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": [],
+              "description": "[S] Any one of these roles (exact names). Empty = anyone."
+            },
+            "securityLevels": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": [],
+              "description": "[S] Any one of these security-level paths."
+            },
+            "requireLogin": {
+              "type": "boolean",
+              "default": false,
+              "description": "[S] Require a logged-in user."
+            }
+          }
+        },
+        "addTo": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "pens",
+            "trendList"
+          ],
+          "default": "auto",
+          "description": "Where 'Add selected' puts tags. trendList = the session trend list (shared with Display Templates and other charts of the trendGroup); pens = this chart's pens prop; auto = trendList when trendGroup is set, else pens."
+        },
+        "openOnStart": {
+          "type": "boolean",
+          "default": false,
+          "description": "Open the browser panel when the chart loads with no pens."
+        },
+        "width": {
+          "type": "integer",
+          "default": 300,
+          "minimum": 200,
+          "maximum": 600,
+          "description": "Panel width in px (wide layout)."
+        }
+      }
+    },
+    "export": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {
+        "csv": {
+          "enabled": true,
+          "layout": "wide",
+          "source": "visible",
+          "timeFormat": "iso",
+          "includeQuality": false
+        },
+        "png": {
+          "enabled": true,
+          "scale": 2,
+          "includeLegend": true
+        },
+        "fileName": "{title}_{start}"
+      },
+      "properties": {
+        "csv": {
+          "type": "object",
+          "additionalProperties": false,
+          "default": {
+            "enabled": true,
+            "layout": "wide",
+            "source": "visible",
+            "timeFormat": "iso",
+            "includeQuality": false
+          },
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "layout": {
+              "type": "string",
+              "enum": [
+                "wide",
+                "tall"
+              ],
+              "default": "wide",
+              "description": "wide = one timestamp column + one column per pen (blank where a pen has no sample); tall = timestamp, pen, value rows."
+            },
+            "source": {
+              "type": "string",
+              "enum": [
+                "visible",
+                "loaded",
+                "raw"
+              ],
+              "default": "visible",
+              "description": "visible = data in the visible window as drawn; loaded = everything the chart holds; raw = re-query raw samples for the visible window (subject to the gateway's point cap)."
+            },
+            "timeFormat": {
+              "type": "string",
+              "default": "iso",
+              "description": "'iso' (chart time zone with offset), 'epoch' (ms), or a pattern like 'YYYY-MM-DD HH:mm:ss.SSS'."
+            },
+            "includeQuality": {
+              "type": "boolean",
+              "default": false,
+              "description": "Add a quality column per pen (bad-quality points are blank values otherwise)."
+            }
+          }
+        },
+        "png": {
+          "type": "object",
+          "additionalProperties": false,
+          "default": {
+            "enabled": true,
+            "scale": 2,
+            "includeLegend": true
+          },
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "scale": {
+              "type": "number",
+              "default": 2,
+              "minimum": 1,
+              "maximum": 4,
+              "description": "Pixel ratio of the image."
+            },
+            "includeLegend": {
+              "type": "boolean",
+              "default": true,
+              "description": "Draw pen names, colours and current values under the plot."
+            }
+          }
+        },
+        "fileName": {
+          "type": "string",
+          "default": "{title}_{start}",
+          "description": "File name without extension. Tokens: {title} {start} {end} (yyyyMMdd-HHmmss)."
+        }
+      }
+    },
+    "annotations": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {
+        "enabled": false,
+        "visible": true,
+        "types": {
+          "note": true,
+          "range": true
+        },
+        "edit": {
+          "enabled": false,
+          "ownOnly": true,
+          "access": {
+            "roles": [],
+            "securityLevels": [],
+            "requireLogin": true
+          }
+        },
+        "moderate": {
+          "enabled": false,
+          "access": {
+            "roles": [],
+            "securityLevels": [],
+            "requireLogin": true
+          }
+        },
+        "color": ""
+      },
+      "description": "Historian annotations (notes and ranges stored with the tag's history). Requires a historian that supports annotations (Core Historian does).",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "[S] Query and show annotations for the chart's pens. Enforced on the gateway."
+        },
+        "visible": {
+          "type": "boolean",
+          "default": true,
+          "description": "Draw annotations by default. Users can hide them for their session in the More menu; this prop does not change."
+        },
+        "types": {
+          "type": "object",
+          "additionalProperties": false,
+          "default": {
+            "note": true,
+            "range": true
+          },
+          "properties": {
+            "note": {
+              "type": "boolean",
+              "default": true,
+              "description": "Point-in-time notes (vertical marker)."
+            },
+            "range": {
+              "type": "boolean",
+              "default": true,
+              "description": "Time ranges (shaded band)."
+            }
+          }
+        },
+        "edit": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "[S] Who may add, edit and delete annotations. Enforced on the gateway; every change is audited.",
+          "default": {
+            "enabled": false,
+            "ownOnly": true,
+            "access": {
+              "roles": [],
+              "securityLevels": [],
+              "requireLogin": true
+            }
+          },
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "[S] Allow adding annotations."
+            },
+            "ownOnly": {
+              "type": "boolean",
+              "default": true,
+              "description": "[S] Users may edit and delete only their own annotations (see moderate)."
+            },
+            "access": {
+              "type": "object",
+              "additionalProperties": false,
+              "default": {
+                "roles": [],
+                "securityLevels": [],
+                "requireLogin": true
+              },
+              "description": "[S] Who may add annotations.",
+              "properties": {
+                "roles": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                },
+                "securityLevels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                },
+                "requireLogin": {
+                  "type": "boolean",
+                  "default": true
+                }
+              }
+            }
+          }
+        },
+        "moderate": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "[S] Who may edit and delete annotations made by others (or by other tools).",
+          "default": {
+            "enabled": false,
+            "access": {
+              "roles": [],
+              "securityLevels": [],
+              "requireLogin": true
+            }
+          },
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "[S] Allow moderation. Off = nobody may change others' annotations."
+            },
+            "access": {
+              "type": "object",
+              "additionalProperties": false,
+              "default": {
+                "roles": [],
+                "securityLevels": [],
+                "requireLogin": true
+              },
+              "description": "[S] Who may moderate.",
+              "properties": {
+                "roles": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                },
+                "securityLevels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                },
+                "requireLogin": {
+                  "type": "boolean",
+                  "default": true
+                }
+              }
+            }
+          }
+        },
+        "color": {
+          "type": "string",
+          "format": "color",
+          "default": "",
+          "description": "Marker colour. Empty = theme primary colour."
+        }
+      }
+    },
+    "appearance": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {
+        "palette": [
+          "#2F7ED8",
+          "#E8743B",
+          "#19A979",
+          "#ED4A7B",
+          "#945ECF",
+          "#13A4B4",
+          "#BF8F00",
+          "#6C8893",
+          "#D15B47",
+          "#4A6FE3"
+        ],
+        "fontSize": 11,
+        "liveBadge": true,
+        "extendToNow": true,
+        "breakOnGapMs": 0,
+        "emptyMessage": "",
+        "staleAfterMs": 0
+      },
+      "properties": {
+        "palette": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "color"
+          },
+          "minItems": 1,
+          "default": [
+            "#2F7ED8",
+            "#E8743B",
+            "#19A979",
+            "#ED4A7B",
+            "#945ECF",
+            "#13A4B4",
+            "#BF8F00",
+            "#6C8893",
+            "#D15B47",
+            "#4A6FE3"
+          ],
+          "description": "Colours given to pens without a colour. Each pen keeps its colour (trend pens: chosen from the tag path, so a tag keeps the same colour across charts and reloads)."
+        },
+        "fontSize": {
+          "type": "number",
+          "default": 11,
+          "minimum": 8,
+          "maximum": 24,
+          "description": "Axis and table font size (px)."
+        },
+        "liveBadge": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the Live / Paused / Stale badge in the toolbar."
+        },
+        "extendToNow": {
+          "type": "boolean",
+          "default": true,
+          "description": "In realtime, continue each line horizontally from its last sample to 'now' while the live value is good (on-change tags stay visible)."
+        },
+        "breakOnGapMs": {
+          "type": "integer",
+          "default": 0,
+          "minimum": 0,
+          "description": "Break lines where two consecutive samples are more than this many ms apart. 0 = never (on-change data stays connected). Drawing only: statistics, X-Trace, Current/End and CSV use the real samples."
+        },
+        "emptyMessage": {
+          "type": "string",
+          "default": "",
+          "description": "Text when there are no pens. Empty = built-in hint."
+        },
+        "staleAfterMs": {
+          "type": "integer",
+          "default": 0,
+          "minimum": 0,
+          "description": "Show 'Stale' when no successful update for this long. 0 = automatic (3 x refresh rate, at least 10 s)."
+        }
+      }
+    },
+    "outputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {
+        "range": {
+          "start": null,
+          "end": null,
+          "followLive": true
+        },
+        "status": {
+          "state": "",
+          "message": "",
+          "lastUpdate": null
+        },
+        "pens": []
+      },
+      "description": "READ-ONLY: written by the chart at runtime for bindings and scripts, only when something changes (lastUpdate at most every 10 s). Not written in the Designer.",
+      "properties": {
+        "range": {
+          "type": "object",
+          "additionalProperties": false,
+          "default": {
+            "start": null,
+            "end": null,
+            "followLive": true
+          },
+          "description": "READ-ONLY: the visible time window after pan/zoom (epoch ms), updated when a gesture ends.",
+          "properties": {
+            "start": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
+            },
+            "end": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
+            },
+            "followLive": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        },
+        "status": {
+          "type": "object",
+          "additionalProperties": false,
+          "default": {
+            "state": "",
+            "message": "",
+            "lastUpdate": null
+          },
+          "description": "READ-ONLY: state = loading | live | paused | historical | stale | error | empty. lastUpdate is written at most every 10 s.",
+          "properties": {
+            "state": {
+              "type": "string",
+              "default": ""
+            },
+            "message": {
+              "type": "string",
+              "default": ""
+            },
+            "lastUpdate": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
+            }
+          }
+        },
+        "pens": {
+          "type": "array",
+          "default": [],
+          "description": "READ-ONLY: effective pens (configured + trend list): { key, tagPath, name, source, visible, status }.",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "styles": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {
+        "title": {
+          "classes": ""
+        },
+        "toolbar": {
+          "classes": ""
+        },
+        "plot": {
+          "classes": ""
+        }
+      },
+      "description": "Style for inner parts (style classes apply as usual).",
+      "properties": {
+        "title": {
+          "$ref": "urn:ignition-schema:schemas/style-properties.schema.json",
+          "default": {
+            "classes": ""
+          }
+        },
+        "toolbar": {
+          "$ref": "urn:ignition-schema:schemas/style-properties.schema.json",
+          "default": {
+            "classes": ""
+          }
+        },
+        "plot": {
+          "$ref": "urn:ignition-schema:schemas/style-properties.schema.json",
+          "default": {
+            "classes": ""
+          }
+        }
+      }
+    },
+    "style": {
+      "$ref": "urn:ignition-schema:schemas/style-properties.schema.json",
+      "default": {
+        "classes": ""
+      }
+    }
+  }
+}

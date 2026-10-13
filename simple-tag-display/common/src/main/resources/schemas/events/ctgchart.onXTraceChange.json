@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "description": "Fired in the browser when pinned X-Trace cursors change. Like every component event, this payload can be imitated by a page script; the audit log (auditId) is the authoritative record.",
+  "properties": {
+    "times": {
+      "type": "string",
+      "description": "Comma-separated pinned cursor times, epoch milliseconds."
+    },
+    "count": {
+      "type": "number",
+      "description": "Number of pinned cursors."
+    }
+  }
+}

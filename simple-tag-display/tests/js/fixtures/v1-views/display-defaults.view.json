@@ -1,0 +1,98 @@
+{
+  "custom": {},
+  "params": {},
+  "props": {
+    "defaultSize": {
+      "height": 200,
+      "width": 300
+    }
+  },
+  "root": {
+    "children": [
+      {
+        "meta": {
+          "name": "DisplayTemplate"
+        },
+        "position": {
+          "basis": "60px"
+        },
+        "props": {
+          "bounds": {
+            "enabled": false,
+            "maxColor": "#00FF00",
+            "maxInclusive": false,
+            "minColor": "#FF0000",
+            "minInclusive": false
+          },
+          "boolean": {
+            "textOnFalse": "",
+            "textOnTrue": ""
+          },
+          "evenRow": false,
+          "row": false,
+          "setpoint": false,
+          "showTagName": true,
+          "showTagValue": true,
+          "showUnits": false,
+          "style": {
+            "classes": ""
+          },
+          "tagNameLabel": "",
+          "tagNameStyle": {
+            "classes": ""
+          },
+          "tagPath": "[default]CTG/Temp",
+          "tagValueStyle": {
+            "classes": ""
+          },
+          "valuePrecision": 1,
+          "verticalAlign": "top"
+        },
+        "type": "com.example.simpletagdisplay.SimpleTagDisplay"
+      },
+      {
+        "meta": {
+          "name": "CTG-Chart"
+        },
+        "position": {
+          "basis": "400px",
+          "grow": 1
+        },
+        "props": {
+          "dateFormat": "YYYY/MM/DD",
+          "endDate": null,
+          "freeRangePanZoom": true,
+          "interaction": {
+            "mode": "panAndZoom",
+            "xTraceVisible": true
+          },
+          "mode": "realtime",
+          "pointCount": 300,
+          "rangeHours": 24,
+          "rawHistory": false,
+          "refreshRate": 1000,
+          "startDate": null,
+          "style": {
+            "classes": ""
+          },
+          "timeFormat": "h:mm A",
+          "visibility": {
+            "showDateRangeSelector": true,
+            "showFullscreenButton": true,
+            "showPenControlDisplay": true,
+            "showRefreshButton": true,
+            "showZoomButton": true
+          }
+        },
+        "type": "com.example.simpletagdisplay.CtgChart"
+      }
+    ],
+    "meta": {
+      "name": "root"
+    },
+    "props": {
+      "direction": "column"
+    },
+    "type": "ia.container.flex"
+  }
+}

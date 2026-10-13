@@ -1,0 +1,63 @@
+{
+  "custom": { "hours": 4 },
+  "params": { "tag": "[default]CTG/Temp", "units": true, "horizontal": false, "canWrite": true },
+  "propConfig": {
+    "params.tag": { "paramDirection": "input", "persistent": true },
+    "params.units": { "paramDirection": "input", "persistent": true }
+  },
+  "props": {},
+  "root": {
+    "type": "ia.container.flex",
+    "meta": { "name": "root" },
+    "props": { "direction": "column" },
+    "children": [
+      {
+        "type": "com.example.simpletagdisplay.SimpleTagDisplay",
+        "meta": { "name": "Bound" },
+        "custom": { "note": "kept" },
+        "propConfig": {
+          "custom.note": { "persistent": true },
+          "position.basis": { "binding": { "type": "expr", "config": { "expression": "'60px'" } } },
+          "props.tagPath": { "binding": { "type": "property", "config": { "path": "view.params.tag" } } },
+          "props.showUnits": { "binding": { "type": "property", "config": { "path": "view.params.units" } } },
+          "props.showTagName": { "persistent": true, "access": "PROTECTED" },
+          "props.row": { "binding": { "type": "property", "config": { "path": "view.params.horizontal" } } },
+          "props.boolean.textOnTrue": { "binding": { "type": "expr", "config": { "expression": "'Running'" } } },
+          "props.tagNameStyle.color": { "binding": { "type": "expr", "config": { "expression": "if({view.params.units}, '#000', '#888')" } } },
+          "props.setpoint": { "binding": { "type": "property", "config": { "path": "view.params.canWrite" } } },
+          "props.bounds.minInclusive": { "binding": { "type": "expr", "config": { "expression": "true" } } }
+        },
+        "props": {
+          "tagPath": "[default]CTG/Temp",
+          "showUnits": true,
+          "showTagName": true,
+          "row": false,
+          "boolean": { "textOnTrue": "Running", "textOnFalse": "" },
+          "tagNameStyle": { "classes": "", "color": "#000" },
+          "setpoint": true,
+          "bounds": { "enabled": false, "minInclusive": true }
+        }
+      },
+      {
+        "type": "com.example.simpletagdisplay.CtgChart",
+        "meta": { "name": "BoundChart" },
+        "propConfig": {
+          "props.rangeHours": { "binding": { "type": "property", "config": { "path": "view.custom.hours" } } },
+          "props.rawHistory": { "binding": { "type": "expr", "config": { "expression": "{view.custom.hours} < 2" } } },
+          "props.visibility.showPenControlDisplay": { "binding": { "type": "expr", "config": { "expression": "true" } } },
+          "props.visibility.showLegend": { "binding": { "type": "expr", "config": { "expression": "true" } } },
+          "props.interaction.xTraceVisible": { "binding": { "type": "expr", "config": { "expression": "false" } } },
+          "props.refreshRate": {
+            "binding": { "type": "expr", "config": { "expression": "5000" } },
+            "onChange": { "enabled": null, "script": "\tsystem.perspective.print(currentValue.value)" }
+          }
+        },
+        "props": {
+          "rangeHours": 4,
+          "rawHistory": false,
+          "refreshRate": 5000
+        }
+      }
+    ]
+  }
+}

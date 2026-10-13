@@ -1,0 +1,67 @@
+{
+  "custom": {},
+  "params": {},
+  "props": {},
+  "root": {
+    "type": "ia.container.coord",
+    "meta": { "name": "root" },
+    "props": {},
+    "children": [
+      {
+        "type": "ia.display.label",
+        "meta": { "name": "Title" },
+        "position": { "x": 0, "y": 0, "width": 200, "height": 30 },
+        "props": { "text": "Nested containers" }
+      },
+      {
+        "type": "ia.container.tab",
+        "meta": { "name": "Tabs" },
+        "position": { "x": 0, "y": 40, "width": 600, "height": 400 },
+        "props": { "tabs": ["One", "Two"] },
+        "children": [
+          {
+            "type": "ia.container.flex",
+            "meta": { "name": "TabOne" },
+            "position": { "tabIndex": 0 },
+            "props": { "direction": "row" },
+            "children": [
+              {
+                "type": "ia.container.flex",
+                "meta": { "name": "Cols" },
+                "position": { "basis": "300px" },
+                "props": { "direction": "column" },
+                "children": [
+                  {
+                    "type": "com.example.simpletagdisplay.SimpleTagDisplay",
+                    "meta": { "name": "Deep" },
+                    "position": { "basis": "80px", "shrink": 0 },
+                    "props": { "tagPath": "[default]CTG/Pressure", "showUnits": true, "row": true }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "ia.container.flex",
+            "meta": { "name": "TabTwo" },
+            "position": { "tabIndex": 1 },
+            "props": { "direction": "column" },
+            "children": [
+              {
+                "type": "ia.display.view",
+                "meta": { "name": "Embedded" },
+                "props": { "path": "Popups/Faceplate", "params": { "showTagName": true } }
+              },
+              {
+                "type": "com.example.simpletagdisplay.CtgChart",
+                "meta": { "name": "DeepChart" },
+                "position": { "basis": "250px" },
+                "props": { "rangeHours": 0.25 }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

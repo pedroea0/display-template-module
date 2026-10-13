@@ -1,96 +1,171 @@
 # =============================================================================
-#  sign-module.ps1  —  invoke module-signer JAR with our dev keystore
+#  sign-module.ps1  -  sign build\Tag-Display.unsigned.modl -> build\Tag-Display.modl
 # =============================================================================
 #
-#  Normally run by build-and-sign.ps1 (which Push-Locations into $ModuleDir
-#  first so the relative paths below resolve). Can also be run standalone
-#  from the simple-tag-display\ directory if you only need to re-sign an
-#  already-built unsigned .modl.
+#  Normally run by build-and-sign.ps1. Standalone use (re-sign an existing
+#  unsigned .modl):  cd simple-tag-display; .\sign-module.ps1
+#  Paths are resolved from $PSScriptRoot, so the current directory does not
+#  matter.
 #
-#  Inputs:
-#      $MODULE_SIGNER_JAR   The signer tool, built from ..\module-signer
-#      $KEYSTORE            JKS containing the private key (dev only — DO NOT
-#                           reuse this credential for anything sensitive)
-#      $CERT_CHAIN          PKCS#7 (.p7b) cert chain for the self-signed cert
-#      $MODULE_IN           build\Tag-Display.unsigned.modl produced by Gradle
-#      $MODULE_OUT          build\Tag-Display.modl — what gets uploaded to gw
+#  Keystore and passwords:
+#    - Production: put the keystore OUTSIDE the repo and set
+#          CTG_KEYSTORE        path to the .jks
+#          CTG_CERT_CHAIN      path to the .p7b chain
+#          CTG_KEY_ALIAS       key alias
+#          CTG_KEYSTORE_PASSWORD, CTG_CERT_PASSWORD
+#      (prod*.jks / prod*.p7b are git-ignored).
+#    - Without CTG_KEYSTORE_PASSWORD the committed DEV keystore is used and a
+#      warning is printed: it is a public, self-signed development credential,
+#      fine for test gateways, never for production. Third-party signing
+#      with a purchased certificate works through the same variables.
+#    - Fail-closed rules: with CTG_KEYSTORE_PASSWORD set, both CTG_KEYSTORE and
+#      CTG_CERT_CHAIN are required and must exist (a custom key is never paired
+#      silently with the committed DEV chain); any CTG_KEYSTORE /
+#      CTG_CERT_CHAIN / CTG_KEY_ALIAS / CTG_CERT_PASSWORD without
+#      CTG_KEYSTORE_PASSWORD is an error (a mistyped password variable must not
+#      fall back to the dev keystore with exit 0); and the signing key's
+#      certificate must be in the chain (SHA-256 fingerprint, keytool), else
+#      the gateway would reject the module at install time. Exit 1 for all.
+#    - The passwords are handed to the signer through environment variables
+#      (module-signer -keystore-pwd-env / -alias-pwd-env), not on its command
+#      line: command lines are visible in the process list and EDR logs. The
+#      signer jar is rebuilt by build-and-sign.ps1 when its sources change (the
+#      -*-pwd-env options exist only in this repository's module-signer).
 #
-#  The chain file is optional: if missing, signer skips -chain= and produces
-#  a self-signed module that Ignition will accept only when "Allow Unsigned
-#  Modules" is enabled in Gateway settings.
+#  The signer's own output is shown, not captured into a variable (a variable
+#  named $args would also shadow PowerShell's automatic $args).
 # =============================================================================
 
-# Use Java 17 when available (matches module build — Ignition rejects newer bytecode)
-$Java17 = "C:\Program Files\Java\jdk-17"
-if (Test-Path $Java17) {
+$ErrorActionPreference = "Stop"
+$ModuleDir = $PSScriptRoot
+
+# Java 17 (same JDK as the build)
+$Java17 = if ($env:JAVA17_HOME) { $env:JAVA17_HOME } else { "C:\Program Files\Java\jdk-17" }
+if (Test-Path (Join-Path $Java17 "bin\java.exe")) {
     $env:JAVA_HOME = $Java17
-    $env:Path = "$env:JAVA_HOME\bin;" + $env:Path
+    $env:Path = "$Java17\bin;" + $env:Path
 }
 
-# All paths relative to simple-tag-display\ (caller is expected to cd here first).
-$MODULE_SIGNER_JAR = "..\module-signer\build\libs\module-signer-1.0.0-jar-with-dependencies.jar"
-$KEYSTORE = "simpletagdisplay.jks"                 # dev-only keystore — committed to repo
-$KEYSTORE_PWD = "simpletagdisplay123"               # dev-only — never reuse for anything real
-$ALIAS = "simpletagdisplay"
-$ALIAS_PWD = "simpletagdisplay123"
-$CERT_CHAIN = "simpletagdisplay.p7b"               # PKCS#7 chain for the self-signed cert
-$MODULE_IN = "build\Tag-Display.unsigned.modl"     # produced by `gradlew build`
-$MODULE_OUT = "build\Tag-Display.modl"             # signed output (what we deploy)
+$SignerJar = Join-Path $ModuleDir "..\module-signer\build\libs\module-signer-1.0.0-jar-with-dependencies.jar"
+$ModuleIn = Join-Path $ModuleDir "build\Tag-Display.unsigned.modl"
+$ModuleOut = Join-Path $ModuleDir "build\Tag-Display.modl"
 
-# Check if module-signer.jar exists
-if (-not (Test-Path $MODULE_SIGNER_JAR)) {
-    Write-Host "ERROR: module-signer.jar not found at: $MODULE_SIGNER_JAR" -ForegroundColor Red
-    Write-Host "Please build it first using: cd ..\module-signer; mvn clean package" -ForegroundColor Yellow
-    exit 1
-}
-
-# Check if unsigned module exists
-if (-not (Test-Path $MODULE_IN)) {
-    Write-Host "ERROR: Unsigned module not found at: $MODULE_IN" -ForegroundColor Red
-    Write-Host "Please build the module first using: .\gradlew.bat build" -ForegroundColor Yellow
-    exit 1
-}
-
-# Check if keystore exists
-if (-not (Test-Path $KEYSTORE)) {
-    Write-Host "ERROR: Keystore not found at: $KEYSTORE" -ForegroundColor Red
-    Write-Host "Please create a keystore first. See SIGNING_GUIDE.md for instructions." -ForegroundColor Yellow
-    exit 1
-}
-
-Write-Host "Signing module..." -ForegroundColor Green
-Write-Host ""
-
-# Build the command arguments
-$args = @(
-    "-jar", $MODULE_SIGNER_JAR,
-    "-keystore=$KEYSTORE",
-    "-keystore-pwd=$KEYSTORE_PWD",
-    "-alias=$ALIAS",
-    "-alias-pwd=$ALIAS_PWD"
-)
-
-# Add chain parameter only if CERT_CHAIN is specified
-if ($CERT_CHAIN -and (Test-Path $CERT_CHAIN)) {
-    $args += "-chain=$CERT_CHAIN"
-}
-
-$args += @(
-    "-module-in=$MODULE_IN",
-    "-module-out=$MODULE_OUT"
-)
-
-# Execute the signing
-$result = & java $args
-
-if ($LASTEXITCODE -eq 0) {
-    Write-Host ""
-    Write-Host "SUCCESS: Module signed successfully!" -ForegroundColor Green
-    Write-Host "Signed module: $MODULE_OUT" -ForegroundColor Green
+if ($env:CTG_KEYSTORE_PASSWORD) {
+    # Production: never mix in the committed dev files
+    $missing = @()
+    if (-not $env:CTG_KEYSTORE) { $missing += "CTG_KEYSTORE" }
+    if (-not $env:CTG_CERT_CHAIN) { $missing += "CTG_CERT_CHAIN" }
+    if ($missing.Count -gt 0) {
+        Write-Host "ERROR: CTG_KEYSTORE_PASSWORD is set but $($missing -join ' and ') is not: refusing to sign with a mix of your key and the committed DEV files." -ForegroundColor Red
+        exit 1
+    }
+    $Keystore = $env:CTG_KEYSTORE
+    $CertChain = $env:CTG_CERT_CHAIN
+    $Alias = if ($env:CTG_KEY_ALIAS) { $env:CTG_KEY_ALIAS } else { "simpletagdisplay" }
+    $KeystorePwd = $env:CTG_KEYSTORE_PASSWORD
+    $AliasPwd = if ($env:CTG_CERT_PASSWORD) { $env:CTG_CERT_PASSWORD } else { $env:CTG_KEYSTORE_PASSWORD }
+    if (-not (Test-Path $CertChain)) {
+        Write-Host "ERROR: certificate chain not found: $CertChain" -ForegroundColor Red
+        exit 1
+    }
 } else {
-    Write-Host ""
-    Write-Host "ERROR: Module signing failed!" -ForegroundColor Red
-    Write-Host "Check the error messages above." -ForegroundColor Yellow
+    $partial = @("CTG_KEYSTORE", "CTG_CERT_CHAIN", "CTG_KEY_ALIAS", "CTG_CERT_PASSWORD") | Where-Object { [Environment]::GetEnvironmentVariable($_) }
+    if ($partial) {
+        Write-Host "ERROR: $($partial -join ', ') set without CTG_KEYSTORE_PASSWORD: refusing to fall back to the public DEV certificate (check the variable name)." -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "WARNING: signing with the public DEV certificate (not for production). Set CTG_KEYSTORE_PASSWORD (and CTG_KEYSTORE, CTG_CERT_CHAIN, CTG_KEY_ALIAS) to sign with your own certificate." -ForegroundColor Yellow
+    $Keystore = Join-Path $ModuleDir "simpletagdisplay.jks"     # dev-only keystore, committed on purpose
+    $CertChain = Join-Path $ModuleDir "simpletagdisplay.p7b"
+    $Alias = "simpletagdisplay"
+    $KeystorePwd = "simpletagdisplay123"                         # dev-only; never reuse
+    $AliasPwd = "simpletagdisplay123"
+}
+
+if (-not (Test-Path $SignerJar)) {
+    Write-Host "ERROR: module-signer jar not found: $SignerJar (build-and-sign.ps1 builds it)." -ForegroundColor Red
+    exit 1
+}
+if (-not (Test-Path $ModuleIn)) {
+    Write-Host "ERROR: unsigned module not found: $ModuleIn (run .\gradlew.bat build first)." -ForegroundColor Red
+    exit 1
+}
+if (-not (Test-Path $Keystore)) {
+    Write-Host "ERROR: keystore not found: $Keystore" -ForegroundColor Red
     exit 1
 }
 
+# Passwords travel to the signer through the ENVIRONMENT of the child process (-keystore-pwd-env /
+# -alias-pwd-env name the variables), never as -keystore-pwd=<secret> on the command line, where the
+# process list and EDR/audit logs would record them. The two variables are set for this process only
+# and removed again below.
+$env:CTG_SIGN_KEYSTORE_PWD = $KeystorePwd
+$env:CTG_SIGN_ALIAS_PWD = $AliasPwd
+$javaArgs = @(
+    "-jar", $SignerJar,
+    "-keystore=$Keystore",
+    "-keystore-pwd-env=CTG_SIGN_KEYSTORE_PWD",
+    "-alias=$Alias",
+    "-alias-pwd-env=CTG_SIGN_ALIAS_PWD"
+)
+if ($CertChain -and (Test-Path $CertChain)) {
+    $javaArgs += "-chain=$CertChain"
+}
+
+# The certificate of the signing key must be in the chain the .modl will carry: the signer copies the chain as-is,
+# so otherwise a mismatch is only found by the gateway at install time. keytool reads the store password
+# from the environment variable (-storepass:env), never from the command line.
+function Get-Sha256Fingerprints([string]$text) {
+    ([regex]::Matches($text, 'SHA-?256:\s*([0-9A-Fa-f:]{64,})') | ForEach-Object { $_.Groups[1].Value.ToUpperInvariant() })
+}
+$keytool = Join-Path $Java17 "bin\keytool.exe"
+if (-not (Test-Path $keytool)) { $keytool = "keytool" }
+$ErrorActionPreference = "Continue"
+$entryText = (& $keytool -list -v -keystore $Keystore -alias $Alias -storepass:env CTG_SIGN_KEYSTORE_PWD 2>&1 | Out-String)
+$entryCode = $LASTEXITCODE
+$chainText = if ($CertChain -and (Test-Path $CertChain)) { (& $keytool -printcert -file $CertChain 2>&1 | Out-String) } else { "" }
+$ErrorActionPreference = "Stop"
+$keyFp = @(Get-Sha256Fingerprints $entryText) | Select-Object -First 1
+$chainFps = @(Get-Sha256Fingerprints $chainText)
+if ($entryCode -ne 0 -or -not $keyFp) {
+    Remove-Item Env:\CTG_SIGN_KEYSTORE_PWD, Env:\CTG_SIGN_ALIAS_PWD -ErrorAction SilentlyContinue
+    Write-Host "ERROR: could not read the certificate of alias '$Alias' from $Keystore (keytool exit $entryCode)." -ForegroundColor Red
+    exit 1
+}
+if ($chainFps -notcontains $keyFp) {
+    Remove-Item Env:\CTG_SIGN_KEYSTORE_PWD, Env:\CTG_SIGN_ALIAS_PWD -ErrorAction SilentlyContinue
+    Write-Host "ERROR: the certificate of the signing key ($keyFp) is not in the chain $CertChain. The gateway would reject this module; pass the chain that belongs to the key." -ForegroundColor Red
+    exit 1
+}
+$javaArgs += @("-module-in=$ModuleIn", "-module-out=$ModuleOut")
+
+$before = if (Test-Path $ModuleOut) { (Get-Item $ModuleOut).LastWriteTimeUtc } else { [DateTime]::MinValue }
+$started = [DateTime]::UtcNow.AddSeconds(-2)
+
+Write-Host "Signing $ModuleIn ..." -ForegroundColor Green
+# Local "Continue": the signer's stderr must not become a terminating error when redirected.
+$ErrorActionPreference = "Continue"
+try {
+    & java @javaArgs
+    $code = $LASTEXITCODE
+} finally {
+    Remove-Item Env:\CTG_SIGN_KEYSTORE_PWD, Env:\CTG_SIGN_ALIAS_PWD -ErrorAction SilentlyContinue
+}
+$ErrorActionPreference = "Stop"
+if ($code -ne 0) {
+    Write-Host "ERROR: module signing failed (exit $code)." -ForegroundColor Red
+    exit $code
+}
+
+# The signer has exited 0 without writing in the past: check the output really is new.
+if (-not (Test-Path $ModuleOut)) {
+    Write-Host "ERROR: signer reported success but $ModuleOut does not exist." -ForegroundColor Red
+    exit 1
+}
+$after = (Get-Item $ModuleOut).LastWriteTimeUtc
+if ($after -le $before -or $after -lt $started) {
+    Write-Host "ERROR: $ModuleOut was not rewritten by the signer." -ForegroundColor Red
+    exit 1
+}
+Write-Host "SUCCESS: signed module $ModuleOut" -ForegroundColor Green
+exit 0

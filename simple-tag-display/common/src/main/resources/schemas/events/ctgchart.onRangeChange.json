@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "description": "Fired in the browser (debounced 500 ms) after the user changes the time range, zooms or pans. Like every component event, this payload can be imitated by a page script; the audit log (auditId) is the authoritative record.",
+  "properties": {
+    "mode": {
+      "type": "string",
+      "description": "\"realtime\" or \"historical\"."
+    },
+    "start": {
+      "type": "number",
+      "description": "Start of the visible window, epoch milliseconds."
+    },
+    "end": {
+      "type": "number",
+      "description": "End of the visible window, epoch milliseconds."
+    }
+  }
+}

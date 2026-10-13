@@ -1,0 +1,116 @@
+{
+  "custom": {},
+  "params": {
+    "tagPath": "",
+    "tagName": "",
+    "trendGroup": "default",
+    "mode": "trendList"
+  },
+  "propConfig": {
+    "params.tagPath": {
+      "paramDirection": "input"
+    },
+    "params.tagName": {
+      "paramDirection": "input"
+    },
+    "params.trendGroup": {
+      "paramDirection": "input"
+    },
+    "params.mode": {
+      "paramDirection": "input"
+    }
+  },
+  "props": {
+    "defaultSize": {
+      "width": 800,
+      "height": 450
+    }
+  },
+  "root": {
+    "type": "ia.container.flex",
+    "version": 0,
+    "meta": {
+      "name": "root"
+    },
+    "props": {
+      "direction": "column",
+      "style": {
+        "padding": "4px"
+      }
+    },
+    "children": [
+      {
+        "type": "ia.display.label",
+        "version": 0,
+        "meta": {
+          "name": "Title"
+        },
+        "position": {
+          "basis": "24px",
+          "shrink": 0
+        },
+        "props": {
+          "style": {
+            "fontWeight": "bold"
+          }
+        },
+        "propConfig": {
+          "props.text": {
+            "binding": {
+              "type": "expr",
+              "config": {
+                "expression": "if({view.params.mode} = 'singleTag', {view.params.tagName}, 'Trend list: ' + {view.params.trendGroup})"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "com.example.simpletagdisplay.CtgChart",
+        "version": 0,
+        "meta": {
+          "name": "Chart"
+        },
+        "position": {
+          "basis": "300px",
+          "grow": 1
+        },
+        "props": {
+          "trendGroup": "default",
+          "pens": [],
+          "timeRange": {
+            "mode": "realtime",
+            "realtime": {
+              "value": 1,
+              "unit": "hours"
+            }
+          }
+        },
+        "propConfig": {
+          "props.trendGroup": {
+            "binding": {
+              "type": "expr",
+              "config": {
+                "expression": "if({view.params.mode} = 'singleTag', '', {view.params.trendGroup})"
+              }
+            }
+          },
+          "props.pens": {
+            "binding": {
+              "type": "property",
+              "config": {
+                "path": "view.params.tagPath"
+              },
+              "transforms": [
+                {
+                  "type": "script",
+                  "code": "\tif self.view.params.mode == 'singleTag' and value:\n\t\treturn [{'tagPath': value}]\n\treturn []"
+                }
+              ]
+            }
+          }
+        }
+      }
+    ]
+  }
+}

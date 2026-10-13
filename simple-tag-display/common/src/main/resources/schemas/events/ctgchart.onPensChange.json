@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "description": "Fired in the browser after a user adds, removes or edits a pen at runtime. Like every component event, this payload can be imitated by a page script; the audit log (auditId) is the authoritative record.",
+  "properties": {
+    "action": {
+      "type": "string",
+      "description": "\"add\", \"remove\" or \"edit\"."
+    },
+    "tagPath": {
+      "type": "string",
+      "description": "Full path of the pen tag."
+    },
+    "source": {
+      "type": "string",
+      "description": "\"pens\" (pens prop) or \"trend\" (session trend list)."
+    }
+  }
+}

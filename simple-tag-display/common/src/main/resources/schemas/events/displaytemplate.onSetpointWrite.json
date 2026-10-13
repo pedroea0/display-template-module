@@ -1,0 +1,47 @@
+{
+  "type": "object",
+  "description": "Fired on the gateway after every setpoint write attempt that reached the tag (success or failure), before the client gets the result. Like every component event, this payload can be imitated by a page script; the audit log (auditId) is the authoritative record.",
+  "properties": {
+    "tagPath": {
+      "type": "string",
+      "description": "Full path of the written tag, e.g. [default]Area/Tank1/Level_SP."
+    },
+    "value": {
+      "description": "Value written (after conversion to the tag data type)."
+    },
+    "previousValue": {
+      "description": "Tag value read just before the write."
+    },
+    "success": {
+      "type": "boolean",
+      "description": "True when the tag accepted the write (Good quality)."
+    },
+    "quality": {
+      "type": "string",
+      "description": "Write result quality name, e.g. Good or Bad_AccessDenied."
+    },
+    "errorCode": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Error code when success is false (e.g. WRITE_DENIED), else null."
+    },
+    "user": {
+      "type": "string",
+      "description": "User name of the Perspective session, or \"Unauthenticated\"."
+    },
+    "timestamp": {
+      "type": "number",
+      "description": "Gateway time of the write, epoch milliseconds."
+    },
+    "editMode": {
+      "type": "string",
+      "description": "How the value was entered: popup, direct, protected or unknown."
+    },
+    "auditId": {
+      "type": "string",
+      "description": "Id of the matching audit record / SimpleTagDisplay.Audit log line."
+    }
+  }
+}

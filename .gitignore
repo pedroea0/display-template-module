@@ -7,11 +7,19 @@ bin/
 out/
 target/
 
-# Reference clones of public Inductive Automation repos — re-cloneable, just bloat in this repo
-archive/reference-repos/
+# =============================================================================
+# Local notes and editor settings (not part of the module)
+# -----------------------------------------------------------------------------
+# Release notes, to-do lists and parked 1.x material are kept on the
+# maintainer's disk only. User-facing limitations are documented in
+# docs/user-guide/known-limitations.md; requests and bugs go to GitHub issues.
+# =============================================================================
+/V2_REPORT.md
+/BACKLOG.md
+/archive/
+.vscode/
 
-# Presentation material — ~48 MB of .pptx (deck + corporate template) plus personal
-# speaker notes. Keep it out of the repo; it is not part of the module.
+# Presentation material (slide decks and speaker notes). Not part of the module.
 presentation/
 story.txt
 
@@ -34,6 +42,10 @@ story.txt
 # =============================================================================
 prod*.jks
 prod*.p7b
+# PKCS#12 keystores (docs/developer-guide/07-signing.md: a CA-issued key usually arrives as .pfx/.p12). None is
+# committed, so every name is ignored, not only prod*.
+*.pfx
+*.p12
 *.keystore
 secrets/
 
@@ -44,7 +56,6 @@ secrets/
 *.iml
 *.ipr
 *.iws
-.vscode/
 .project
 .classpath
 .settings/
@@ -71,3 +82,11 @@ $RECYCLE.BIN/
 # =============================================================================
 CLAUDE.md
 .claude/
+
+# =============================================================================
+# Local working material (never published — repo is public)
+# =============================================================================
+.work/
+ignition-automation-tools/
+*.vtt
+__pycache__/

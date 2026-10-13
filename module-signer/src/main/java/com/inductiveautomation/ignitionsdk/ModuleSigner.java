@@ -106,6 +106,10 @@ public class ModuleSigner {
         public static final String OPT_KEY_STORE_PWD = "keystore-pwd";
         public static final String OPT_ALIAS = "alias";
         public static final String OPT_ALIAS_PWD = "alias-pwd";
+        /** Name of an environment variable holding the keystore password (keeps it off the command line). */
+        public static final String OPT_KEY_STORE_PWD_ENV = "keystore-pwd-env";
+        /** Name of an environment variable holding the alias password (keeps it off the command line). */
+        public static final String OPT_ALIAS_PWD_ENV = "alias-pwd-env";
         public static final String OPT_CHAIN = "chain";
         public static final String OPT_MODULE_IN = "module-in";
         public static final String OPT_MODULE_OUT = "module-out";
@@ -117,9 +121,9 @@ public class ModuleSigner {
             CommandLine commandLine = parser.parse(makeOptions(), args);
 
             KeyStore keyStore;
-            String keyStorePwd = commandLine.getOptionValue(OPT_KEY_STORE_PWD, "");
+            String keyStorePwd = password(commandLine, OPT_KEY_STORE_PWD, OPT_KEY_STORE_PWD_ENV);
             String alias = commandLine.getOptionValue(OPT_ALIAS);
-            String aliasPwd = commandLine.getOptionValue(OPT_ALIAS_PWD, "");
+            String aliasPwd = password(commandLine, OPT_ALIAS_PWD, OPT_ALIAS_PWD_ENV);
 
             if (commandLine.hasOption(OPT_PKCS11_CFG)) {
                 Provider p = Security.getProvider("SunPKCS11");
@@ -155,6 +159,24 @@ public class ModuleSigner {
             moduleSigner.signModule(printStream, moduleIn, moduleOut);
         }
 
+        /**
+         * Password from {@code -<envOpt>=VAR} (the value of environment variable VAR) or, failing that, from the
+         * literal {@code -<opt>=...} option. Passwords on the command line are visible in the process list and in
+         * EDR/audit logs, so callers should prefer the env form.
+         */
+        private static String password(CommandLine commandLine, String opt, String envOpt) {
+            if (commandLine.hasOption(envOpt)) {
+                String var = commandLine.getOptionValue(envOpt);
+                String value = System.getenv(var);
+                if (value == null) {
+                    System.out.println("environment variable '" + var + "' (" + envOpt + ") is not set.");
+                    System.exit(-1);
+                }
+                return value;
+            }
+            return commandLine.getOptionValue(opt, "");
+        }
+
         private static Options makeOptions() {
             Option keyStore = Option.builder()
                     .longOpt(OPT_KEY_STORE)
@@ -164,6 +186,16 @@ public class ModuleSigner {
 
             Option keyStorePassword = Option.builder()
                     .longOpt(OPT_KEY_STORE_PWD)
+                    .hasArg()
+                    .build();
+
+            Option keyStorePasswordEnv = Option.builder()
+                    .longOpt(OPT_KEY_STORE_PWD_ENV)
+                    .hasArg()
+                    .build();
+
+            Option aliasPasswordEnv = Option.builder()
+                    .longOpt(OPT_ALIAS_PWD_ENV)
                     .hasArg()
                     .build();
 
@@ -212,6 +244,8 @@ public class ModuleSigner {
                     .addOption(keyStorePassword)
                     .addOption(alias)
                     .addOption(aliasPassword)
+                    .addOption(keyStorePasswordEnv)
+                    .addOption(aliasPasswordEnv)
                     .addOption(chain)
                     .addOption(moduleIn)
                     .addOption(moduleOut)

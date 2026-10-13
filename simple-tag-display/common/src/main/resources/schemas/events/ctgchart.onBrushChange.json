@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "description": "Fired in the browser when a range brush is added, changed or removed. Like every component event, this payload can be imitated by a page script; the audit log (auditId) is the authoritative record.",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Brush id."
+    },
+    "start": {
+      "type": "number",
+      "description": "Brush start, epoch milliseconds."
+    },
+    "end": {
+      "type": "number",
+      "description": "Brush end, epoch milliseconds."
+    },
+    "plot": {
+      "type": "number",
+      "description": "Index of the plot the brush is on."
+    },
+    "action": {
+      "type": "string",
+      "description": "\"add\", \"change\" or \"remove\"."
+    }
+  }
+}

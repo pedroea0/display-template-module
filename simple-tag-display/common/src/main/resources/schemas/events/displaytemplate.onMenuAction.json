@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "description": "Fired in the browser when a menu item is chosen (custom items, trend page / popup items). Attach Popup, Navigate or Script actions here. Like every component event, this payload can be imitated by a page script; the audit log (auditId) is the authoritative record.",
+  "properties": {
+    "action": {
+      "type": "string",
+      "description": "Id of the chosen item (custom item id, or trendPage / trendPopup / copyPath)."
+    },
+    "tagPath": {
+      "type": "string",
+      "description": "Full path of the tag shown by the component."
+    },
+    "tagName": {
+      "type": "string",
+      "description": "Tag name (last part of tagPath)."
+    },
+    "trendGroup": {
+      "type": "string",
+      "description": "Trend group of the component."
+    }
+  }
+}

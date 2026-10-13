@@ -1,0 +1,100 @@
+{
+ "_comment": "Shared trendGroup normalisation vectors. Read by TagPathsBasicsTest (Java) and delegate-base.test.mjs (JS): both implementations must give the same output. Rule: trim UTF-16 code units <= U+0020 at both ends (Java String.trim semantics); empty -> 'default' (display) / null (chart); every code unit outside [A-Za-z0-9_.-] -> '_'; first 64 code units.",
+ "vectors": [
+  {
+   "in": null,
+   "kind": "dt",
+   "out": "default"
+  },
+  {
+   "in": null,
+   "kind": "chart",
+   "out": null
+  },
+  {
+   "in": "",
+   "kind": "dt",
+   "out": "default"
+  },
+  {
+   "in": "   ",
+   "kind": "chart",
+   "out": null
+  },
+  {
+   "in": " Area 1.B-2 ",
+   "kind": "dt",
+   "out": "Area_1.B-2"
+  },
+  {
+   "in": "\tg\r\n",
+   "kind": "dt",
+   "out": "g"
+  },
+  {
+   "in": "\u0001g\u001f",
+   "kind": "dt",
+   "out": "g"
+  },
+  {
+   "in": "\u0001",
+   "kind": "dt",
+   "out": "default"
+  },
+  {
+   "in": "\u0001\u0002",
+   "kind": "chart",
+   "out": null
+  },
+  {
+   "in": "\u00a0g",
+   "kind": "dt",
+   "out": "_g"
+  },
+  {
+   "in": "\u2003g\u2003",
+   "kind": "chart",
+   "out": "_g_"
+  },
+  {
+   "in": "\u007f g",
+   "kind": "dt",
+   "out": "__g"
+  },
+  {
+   "in": "\u00a0",
+   "kind": "chart",
+   "out": "_"
+  },
+  {
+   "in": "a/b\\c",
+   "kind": "dt",
+   "out": "a_b_c"
+  },
+  {
+   "in": "caf\u00e9",
+   "kind": "dt",
+   "out": "caf_"
+  },
+  {
+   "in": "\ud83d\ude00",
+   "kind": "dt",
+   "out": "__"
+  },
+  {
+   "in": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "kind": "chart",
+   "out": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "in": "  yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy  ",
+   "kind": "dt",
+   "out": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+  },
+  {
+   "in": "Line_7.Press-01",
+   "kind": "dt",
+   "out": "Line_7.Press-01"
+  }
+ ]
+}

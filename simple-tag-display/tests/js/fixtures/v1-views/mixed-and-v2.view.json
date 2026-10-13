@@ -1,0 +1,32 @@
+{
+  "custom": {},
+  "params": {},
+  "props": {},
+  "root": {
+    "type": "ia.container.flex",
+    "meta": { "name": "root" },
+    "props": {},
+    "children": [
+      {
+        "type": "com.example.simpletagdisplay.SimpleTagDisplay",
+        "meta": { "name": "AlreadyV2" },
+        "props": { "tagPath": "[default]CTG/Temp", "units": { "visible": false }, "layout": { "verticalAlign": "top" }, "setpoint": { "enabled": true } }
+      },
+      {
+        "type": "com.example.simpletagdisplay.SimpleTagDisplay",
+        "meta": { "name": "Mixed" },
+        "props": { "tagPath": "[default]CTG/Temp", "showUnits": true, "units": { "visible": false }, "row": true, "label": { "text": "Kept" }, "tagNameLabel": "Ignored", "customThing": 1 }
+      },
+      {
+        "type": "com.example.simpletagdisplay.CtgChart",
+        "meta": { "name": "AlreadyV2Chart" },
+        "props": { "timeRange": { "realtime": { "value": 2, "unit": "hours" } }, "interaction": { "mode": "pan" } }
+      },
+      {
+        "type": "com.example.simpletagdisplay.CtgChart",
+        "meta": { "name": "MixedChart" },
+        "props": { "rangeHours": 2, "interaction": { "mode": "zoom", "xTraceVisible": false }, "query": { "aggregation": "Average" } }
+      }
+    ]
+  }
+}
